@@ -22,3 +22,4 @@ apscheduler
 # --- Веб-скрейпинг (опционально) ---
 beautifulsoup4
 requests
+openai
