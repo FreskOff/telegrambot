@@ -2,7 +2,7 @@
 # Функции для выполнения CRUD-операций (Create, Read, Update, Delete) с базой данных.
 
 import logging
-from typing import List
+from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update as sqlalchemy_update, desc, delete as sqlalchemy_delete
@@ -31,11 +31,41 @@ async def get_or_create_user(session: AsyncSession, tg_user: TelegramUser) -> Us
             await session.commit()
         return db_user
     else:
-        new_user = User(id=tg_user.id, username=tg_user.username, first_name=tg_user.first_name, last_name=tg_user.last_name)
+        new_user = User(
+            id=tg_user.id,
+            username=tg_user.username,
+            first_name=tg_user.first_name,
+            last_name=tg_user.last_name,
+        )
         session.add(new_user)
         await session.commit()
         await session.refresh(new_user)
         return new_user
+
+async def get_user(session: AsyncSession, user_id: int) -> Optional[User]:
+    result = await session.execute(select(User).filter(User.id == user_id))
+    return result.scalar_one_or_none()
+
+async def update_user_settings(session: AsyncSession, user_id: int, **kwargs):
+    if not kwargs:
+        return
+    await session.execute(
+        sqlalchemy_update(User).where(User.id == user_id).values(**kwargs)
+    )
+    await session.commit()
+
+async def get_user_stats(session: AsyncSession, user_id: int) -> dict:
+    user = await get_user(session, user_id)
+    result = await session.execute(
+        select(func.count()).select_from(ChatHistory).filter(ChatHistory.user_id == user_id)
+    )
+    count = result.scalar_one() or 0
+    return {
+        "language": user.language if user else "ru",
+        "timezone": user.timezone if user else "UTC",
+        "currency": user.currency if user else "USD",
+        "message_count": count,
+    }
 
 # --- Операции с Алертами ---
 async def add_price_alert(session: AsyncSession, user_id: int, symbol: str, price: float, direction: str) -> PriceAlert:

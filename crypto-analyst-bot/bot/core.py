@@ -11,7 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ai.dispatcher import classify_intent, extract_entities
 from database import operations as db_ops
 from crypto.handler import handle_crypto_info_request
-from settings.user import handle_setup_alert, handle_manage_alerts
+from settings.user import (
+    handle_setup_alert,
+    handle_manage_alerts,
+    handle_change_language,
+    handle_settings_command,
+)
+from settings.messages import get_text
 from ai.general import handle_general_ai_conversation
 from analysis.handler import handle_token_analysis
 from crypto.pre_market import get_premarket_signals
@@ -21,29 +27,21 @@ logger = logging.getLogger(__name__)
 
 # --- Обработчики и заглушки ---
 async def handle_unsupported_request(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
+    lang = context.user_data.get('lang', 'ru')
     error_map = {
-        "AI_RATE_LIMIT": "⏳ Кажется, я сейчас очень популярен и достиг лимита запросов к своему AI-мозгу. Пожалуйста, попробуйте снова через минуту.",
-        "AI_API_HTTP_ERROR": "🔧 Возникла временная проблема с подключением к AI. Попробуйте еще раз.",
-        "AI_SERVICE_UNCONFIGURED": "🔧 Мой AI-модуль не настроен. Пожалуйста, сообщите моему администратору."
+        "AI_RATE_LIMIT": get_text(lang, 'ai_rate_limit'),
+        "AI_API_HTTP_ERROR": get_text(lang, 'ai_api_http_error'),
+        "AI_SERVICE_UNCONFIGURED": get_text(lang, 'ai_service_unconfigured'),
     }
-    response_text = error_map.get(payload, f"😕 Извините, я не совсем понял ваш запрос.")
+    response_text = error_map.get(payload, get_text(lang, 'unsupported_request'))
     await update.effective_message.reply_text(response_text)
     await db_ops.add_chat_message(session=db_session, user_id=update.effective_user.id, role='model', text=response_text)
 
 async def handle_bot_help(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     user_id = update.effective_user.id
-    help_text = (
-        "🤖 *Я - ваш Интеллектуальный Крипто-Аналитик!*\n\n"
-        "Примеры моих возможностей:\n"
-        "▫️ *'какая цена у биткоина?'* - узнать цену\n"
-        "▫️ *'расскажи про solana'* - глубокий анализ токена\n"
-        "▫️ *'где купить btc?'* - места покупки\n"
-        "▫️ *'какие ico скоро?'* - сканирование премаркета\n"
-        "▫️ *'что такое DeFi?'* - обучающие уроки\n"
-        "▫️ *'сообщи когда eth будет 4000'* - установка алертов\n"
-        "▫️ *'мой портфель'* - управление портфолио\n\n"
-        "Просто напишите мне свой вопрос!"
-    )
+    lang = context.user_data.get('lang', 'ru')
+    lang = context.user_data.get('lang', 'ru')
+    help_text = get_text(lang, 'bot_help')
     await update.effective_message.reply_text(help_text, parse_mode=constants.ParseMode.MARKDOWN)
     await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=help_text)
 
@@ -53,9 +51,10 @@ async def handle_where_to_buy(update: Update, context: CallbackContext, payload:
         return
 
     user_id = update.effective_user.id
+    lang = context.user_data.get('lang', 'ru')
     symbol = payload.strip().upper()
     await update.effective_message.reply_text(
-        f"⏳ Ищу, где купить *{symbol}*...",
+        get_text(lang, 'where_to_buy_search', symbol=symbol),
         parse_mode=constants.ParseMode.MARKDOWN,
     )
 
@@ -63,7 +62,7 @@ async def handle_where_to_buy(update: Update, context: CallbackContext, payload:
         pairs = await coinmarketcap_client.get_market_pairs(symbol)
         binance_price = await binance_client.get_price(f"{symbol}USDT")
 
-        lines = [f"💱 *Где купить {symbol}:*"]
+        lines = [get_text(lang, 'where_to_buy_header', symbol=symbol)]
         if pairs:
             for p in pairs:
                 price = p.get("price")
@@ -71,12 +70,12 @@ async def handle_where_to_buy(update: Update, context: CallbackContext, payload:
                 fee = "0.1%" if (p.get("exchange") or "").lower() == "binance" else "—"
                 link = f"[ссылка]({p['url']})" if p.get("url") else ""
                 lines.append(
-                    f"• *{p.get('exchange')}*: {price_text} | комиссия {fee} {link}"
+                    get_text(lang, 'where_to_buy_exchange_line', exchange=p.get('exchange'), price=price_text, fee=fee, link=link)
                 )
         if binance_price and not any((p.get("exchange") or "").lower() == "binance" for p in (pairs or [])):
             binance_link = f"https://www.binance.com/en/trade/{symbol}_USDT"
             lines.append(
-                f"• *Binance*: ${binance_price:,.2f} | комиссия 0.1% [ссылка]({binance_link})"
+                get_text(lang, 'where_to_buy_binance_line', price=f"{binance_price:,.2f}", link=binance_link)
             )
 
         response = "\n".join(lines)
@@ -89,18 +88,19 @@ async def handle_where_to_buy(update: Update, context: CallbackContext, payload:
 
     except Exception as e:
         logger.error(f"Ошибка в handle_where_to_buy: {e}", exc_info=True)
-        error_text = "😕 Не удалось получить данные о площадках."
+        error_text = get_text(lang, 'where_to_buy_error')
         await update.effective_message.reply_text(error_text)
         await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=error_text)
 async def handle_premarket_scan(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
+    lang = context.user_data.get('lang', 'ru')
     await update.effective_message.reply_text(
-        "⏳ Сканирую премаркет...",
+        get_text(lang, 'premarket_scanning'),
         parse_mode=constants.ParseMode.MARKDOWN,
     )
 
     events = await get_premarket_signals()
     if not events:
-        response = "😕 Не удалось получить актуальные данные."
+        response = get_text(lang, 'premarket_no_data')
     else:
         lines = []
         for e in events:
@@ -108,7 +108,7 @@ async def handle_premarket_scan(update: Update, context: CallbackContext, payloa
             symbol = f"({e['symbol']})" if e.get("symbol") else ""
             date = f" - {e['event_date']}" if e.get("event_date") else ""
             lines.append(f"• *{name}* {symbol} — {e['event_type']}{date}")
-        response = "📅 *Предстоящие события:*\n" + "\n".join(lines)
+        response = get_text(lang, 'premarket_header') + "\n" + "\n".join(lines)
 
     await update.effective_message.reply_text(
         response,
@@ -128,15 +128,13 @@ async def handle_edu_lesson(update: Update, context: CallbackContext, payload: s
 
     from education import get_definition, list_courses
 
+    lang = context.user_data.get('lang', 'ru')
     term_definition = get_definition(payload)
 
     if term_definition:
         response = f"📚 *{payload.upper()}* — {term_definition}"
     else:
-        response = (
-            f"😕 Урок по теме *{payload}* пока не готов. "
-            "В будущем здесь появятся расширенные материалы."
-        )
+        response = get_text(lang, 'edu_unknown', topic=payload)
 
     await update.effective_message.reply_text(
         response, parse_mode=constants.ParseMode.MARKDOWN
@@ -146,18 +144,20 @@ async def handle_edu_lesson(update: Update, context: CallbackContext, payload: s
     courses = list_courses()
     if courses:
         course_lines = [f"• {c.title} — {c.stars_price}⭐" for c in courses]
-        offer = "\n\nДоступны мини‑курсы (оплата звёздами):\n" + "\n".join(course_lines)
+        offer = get_text(lang, 'course_offer', courses="\n".join(course_lines))
         await update.effective_message.reply_text(
             offer, parse_mode=constants.ParseMode.MARKDOWN
         )
 async def handle_track_coin(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
+    lang = context.user_data.get('lang', 'ru')
     if not payload:
-        await update.effective_message.reply_text("Укажите символ монеты.")
+        await update.effective_message.reply_text(get_text(lang, 'track_missing_symbol'))
         return
     await handle_portfolio_summary(update, context, f"add {payload}", db_session)
 async def handle_untrack_coin(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
+    lang = context.user_data.get('lang', 'ru')
     if not payload:
-        await update.effective_message.reply_text("Укажите символ монеты.")
+        await update.effective_message.reply_text(get_text(lang, 'track_missing_symbol'))
         return
     await handle_portfolio_summary(update, context, f"remove {payload}", db_session)
 async def handle_portfolio_summary(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
@@ -173,22 +173,22 @@ async def handle_portfolio_summary(update: Update, context: CallbackContext, pay
         quantity = float(parts[2]) if len(parts) >= 3 else 0.0
         price = float(parts[3]) if len(parts) >= 4 else 0.0
         await db_ops.add_coin_to_portfolio(db_session, user_id, symbol, quantity, price)
-        response = f"✅ Монета *{symbol.upper()}* добавлена в портфель."
+        response = get_text(lang, 'portfolio_add', symbol=symbol.upper())
 
     elif action == "remove" and len(parts) >= 2:
         symbol = parts[1]
         removed = await db_ops.remove_coin_from_portfolio(db_session, user_id, symbol)
-        response = "🚮 Монета успешно удалена." if removed else "Монета не найдена в портфеле."
+        response = get_text(lang, 'coin_removed') if removed else "Монета не найдена в портфеле."
 
     else:
         portfolio = await db_ops.get_user_portfolio(db_session, user_id)
         if not portfolio:
-            response = "Ваш портфель пуст."
+            response = get_text(lang, 'portfolio_empty')
         else:
             symbols = [c.coin_symbol for c in portfolio]
             coin_ids, _ = await get_coin_ids_from_symbols(symbols)
             price_data = await coingecko_client.get_simple_price(coin_ids)
-            lines = ["💼 *Ваш портфель:*\n"]
+            lines = [get_text(lang, 'portfolio_header')]
             total_value = 0.0
             for coin in portfolio:
                 coin_id = COIN_ID_MAP.get(coin.coin_symbol)
@@ -226,6 +226,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
     user_input = message.text.strip()
     db_user = await db_ops.get_or_create_user(session=db_session, tg_user=user)
     logger.info(f"Обработка сообщения от {db_user.id}: '{user_input}'")
+    context.user_data['lang'] = db_user.language
     
     await db_ops.add_chat_message(session=db_session, user_id=user.id, role='user', text=user_input)
 
@@ -234,12 +235,16 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         '/start': handle_bot_help,
         '/help': handle_bot_help,
         '/portfolio': handle_portfolio_summary,
-        '/alerts': handle_manage_alerts
+        '/alerts': handle_manage_alerts,
+        '/lang': handle_change_language,
+        '/settings': handle_settings_command,
     }
-    if user_input.lower() in hardcoded_commands:
-        logger.info(f"Обработка жестко заданной команды: {user_input.lower()}")
-        await hardcoded_commands[user_input.lower()](update, context, "list", db_session)
-        return
+    for cmd, func in hardcoded_commands.items():
+        if user_input.lower().startswith(cmd):
+            arg = user_input[len(cmd):].strip()
+            logger.info(f"Обработка жестко заданной команды: {cmd}")
+            await func(update, context, arg, db_session)
+            return
 
     try:
         await context.bot.send_chat_action(chat_id=message.chat_id, action=constants.ChatAction.TYPING)
@@ -283,4 +288,5 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
 
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}", exc_info=True)
-        await message.reply_text("💥 Ой, что-то пошло не так.")
+        lang = context.user_data.get('lang', 'ru')
+        await message.reply_text(get_text(lang, 'error_generic'))
