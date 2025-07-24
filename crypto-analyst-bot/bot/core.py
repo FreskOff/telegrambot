@@ -53,11 +53,59 @@ async def handle_premarket_scan(update: Update, context: CallbackContext, payloa
 async def handle_edu_lesson(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     await update.effective_message.reply_text(f"⏳ Готовлю урок по теме *'{payload}'*...", parse_mode=constants.ParseMode.MARKDOWN)
 async def handle_track_coin(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
-    await update.effective_message.reply_text(f"⏳ Добавляю *{payload}* в портфель...", parse_mode=constants.ParseMode.MARKDOWN)
+    if not payload:
+        await update.effective_message.reply_text("Укажите символ монеты.")
+        return
+    await handle_portfolio_summary(update, context, f"add {payload}", db_session)
 async def handle_untrack_coin(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
-    await update.effective_message.reply_text(f"⏳ Удаляю *{payload}* из портфеля...", parse_mode=constants.ParseMode.MARKDOWN)
+    if not payload:
+        await update.effective_message.reply_text("Укажите символ монеты.")
+        return
+    await handle_portfolio_summary(update, context, f"remove {payload}", db_session)
 async def handle_portfolio_summary(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
-    await update.effective_message.reply_text("⏳ Собираю данные по портфелю...", parse_mode=constants.ParseMode.MARKDOWN)
+    if not update.effective_message:
+        return
+
+    user_id = update.effective_user.id
+    parts = payload.split()
+    action = parts[0].lower() if parts else "list"
+
+    if action == "add" and len(parts) >= 2:
+        symbol = parts[1]
+        quantity = float(parts[2]) if len(parts) >= 3 else 0.0
+        price = float(parts[3]) if len(parts) >= 4 else 0.0
+        await db_ops.add_coin_to_portfolio(db_session, user_id, symbol, quantity, price)
+        response = f"✅ Монета *{symbol.upper()}* добавлена в портфель."
+
+    elif action == "remove" and len(parts) >= 2:
+        symbol = parts[1]
+        removed = await db_ops.remove_coin_from_portfolio(db_session, user_id, symbol)
+        response = "🚮 Монета успешно удалена." if removed else "Монета не найдена в портфеле."
+
+    else:
+        portfolio = await db_ops.get_user_portfolio(db_session, user_id)
+        if not portfolio:
+            response = "Ваш портфель пуст."
+        else:
+            symbols = [c.coin_symbol for c in portfolio]
+            coin_ids, _ = await get_coin_ids_from_symbols(symbols)
+            price_data = await coingecko_client.get_simple_price(coin_ids)
+            lines = ["💼 *Ваш портфель:*\n"]
+            total_value = 0.0
+            for coin in portfolio:
+                coin_id = COIN_ID_MAP.get(coin.coin_symbol)
+                price = price_data.get(coin_id, {}).get("usd", 0)
+                value = (coin.quantity or 0) * price
+                total_value += value
+                profit = value - (coin.quantity or 0) * (coin.buy_price or 0)
+                lines.append(
+                    f"• *{coin.coin_symbol}*: {coin.quantity:g} шт. | текущая цена ${price:,.2f} | P/L ${profit:,.2f}"
+                )
+            lines.append(f"\nВсего: ${total_value:,.2f}")
+            response = "\n".join(lines)
+
+    await update.effective_message.reply_text(response, parse_mode=constants.ParseMode.MARKDOWN)
+    await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=response)
 
 
 async def get_symbol_from_context(session: AsyncSession, user_id: int) -> str | None:
