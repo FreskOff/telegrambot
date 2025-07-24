@@ -15,6 +15,7 @@ from settings.user import handle_setup_alert, handle_manage_alerts
 from ai.general import handle_general_ai_conversation
 from analysis.handler import handle_token_analysis
 from crypto.pre_market import get_premarket_signals
+from utils.api_clients import coinmarketcap_client, binance_client
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,49 @@ async def handle_bot_help(update: Update, context: CallbackContext, payload: str
 
 # ... (все остальные заглушки)
 async def handle_where_to_buy(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
-    await update.effective_message.reply_text(f"⏳ Ищу, где купить *{payload}*...", parse_mode=constants.ParseMode.MARKDOWN)
+    if not update.effective_message:
+        return
+
+    user_id = update.effective_user.id
+    symbol = payload.strip().upper()
+    await update.effective_message.reply_text(
+        f"⏳ Ищу, где купить *{symbol}*...",
+        parse_mode=constants.ParseMode.MARKDOWN,
+    )
+
+    try:
+        pairs = await coinmarketcap_client.get_market_pairs(symbol)
+        binance_price = await binance_client.get_price(f"{symbol}USDT")
+
+        lines = [f"💱 *Где купить {symbol}:*"]
+        if pairs:
+            for p in pairs:
+                price = p.get("price")
+                price_text = f"${price:,.2f}" if price else "N/A"
+                fee = "0.1%" if (p.get("exchange") or "").lower() == "binance" else "—"
+                link = f"[ссылка]({p['url']})" if p.get("url") else ""
+                lines.append(
+                    f"• *{p.get('exchange')}*: {price_text} | комиссия {fee} {link}"
+                )
+        if binance_price and not any((p.get("exchange") or "").lower() == "binance" for p in (pairs or [])):
+            binance_link = f"https://www.binance.com/en/trade/{symbol}_USDT"
+            lines.append(
+                f"• *Binance*: ${binance_price:,.2f} | комиссия 0.1% [ссылка]({binance_link})"
+            )
+
+        response = "\n".join(lines)
+        await update.effective_message.reply_text(
+            response,
+            parse_mode=constants.ParseMode.MARKDOWN,
+            disable_web_page_preview=True,
+        )
+        await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=response)
+
+    except Exception as e:
+        logger.error(f"Ошибка в handle_where_to_buy: {e}", exc_info=True)
+        error_text = "😕 Не удалось получить данные о площадках."
+        await update.effective_message.reply_text(error_text)
+        await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=error_text)
 async def handle_premarket_scan(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     await update.effective_message.reply_text(
         "⏳ Сканирую премаркет...",
