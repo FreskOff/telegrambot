@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from utils.api_clients import coingecko_client
 from ai.formatter import format_data_with_ai
 from database import operations as db_ops
+from settings.messages import get_text
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +53,12 @@ async def handle_crypto_info_request(update: Update, context: CallbackContext, p
     if not update.effective_message: return
     
     user_id = update.effective_user.id
+    lang = context.user_data.get('lang', 'ru')
     symbols = payload.split(',')
     coin_ids, not_found = await get_coin_ids_from_symbols(symbols)
 
     if not coin_ids:
-        response_text = f"😕 К сожалению, я не смог найти информацию по монетам: '{payload}'."
+        response_text = get_text(lang, 'crypto_not_found', payload=payload)
         await update.effective_message.reply_text(response_text)
         await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=response_text)
         return
@@ -66,7 +68,7 @@ async def handle_crypto_info_request(update: Update, context: CallbackContext, p
         price_data = await coingecko_client.get_simple_price(coin_ids=coin_ids)
 
         if not price_data:
-            response_text = "📉 Не удалось получить данные о ценах. API может быть временно недоступен."
+            response_text = get_text(lang, 'crypto_no_data')
             await update.effective_message.reply_text(response_text)
             await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=response_text)
             return
@@ -86,4 +88,4 @@ async def handle_crypto_info_request(update: Update, context: CallbackContext, p
 
     except Exception as e:
         logger.error(f"Ошибка при обработке крипто-запроса: {e}", exc_info=True)
-        await update.effective_message.reply_text("💥 Произошла ошибка при получении данных о криптовалюте.")
+        await update.effective_message.reply_text(get_text(lang, 'crypto_api_error'))

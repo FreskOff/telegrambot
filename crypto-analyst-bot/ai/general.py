@@ -12,6 +12,7 @@ from telegram import Update, constants
 from telegram.ext import CallbackContext
 
 from database import operations as db_ops
+from settings.messages import get_text
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -50,6 +51,7 @@ async def handle_general_ai_conversation(update: Update, context: CallbackContex
         
     user_id = update.effective_user.id
     user_input = payload
+    lang = context.user_data.get('lang', 'ru')
 
     try:
         history_records = await db_ops.get_chat_history(session=db_session, user_id=user_id, limit=10)
@@ -73,11 +75,12 @@ async def handle_general_ai_conversation(update: Update, context: CallbackContex
             api_data = response.json()
             ai_response = api_data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
-        if not ai_response: ai_response = "Не могу сформулировать ответ. Попробуйте спросить иначе."
+        if not ai_response:
+            ai_response = get_text(lang, 'ai_generic_empty')
 
         await update.effective_message.reply_text(ai_response, parse_mode=constants.ParseMode.MARKDOWN)
         await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=ai_response)
 
     except Exception as e:
         logger.error(f"Ошибка в обработчике общего диалога: {e}", exc_info=True)
-        await update.effective_message.reply_text("💥 Ой, произошла ошибка во время нашего разговора.")
+        await update.effective_message.reply_text(get_text(lang, 'ai_generic_error'))

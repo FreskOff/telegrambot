@@ -20,6 +20,9 @@ class User(Base):
     last_name = Column(String, nullable=True, comment="Фамилия пользователя")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_activity_at = Column(DateTime(timezone=True), onupdate=func.now())
+    language = Column(String, nullable=False, default="ru")
+    timezone = Column(String, nullable=False, default="UTC")
+    currency = Column(String, nullable=False, default="USD")
     
     alerts = relationship("PriceAlert", back_populates="user", cascade="all, delete-orphan")
     tracked_coins = relationship("TrackedCoin", back_populates="user", cascade="all, delete-orphan")

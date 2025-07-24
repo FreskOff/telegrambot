@@ -12,6 +12,7 @@ from telegram.ext import CallbackContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import operations as db_ops
+from settings.messages import get_text
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -71,12 +72,14 @@ async def _generate_summary(prompt: str) -> str:
             return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
 async def handle_token_analysis(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
-    if not update.effective_message: return
+    if not update.effective_message:
+        return
     user_id = update.effective_user.id
+    lang = context.user_data.get('lang', 'ru')
     
     # --- ИСПРАВЛЕНИЕ: Проверяем, что payload не пустой ---
     if not payload:
-        await update.effective_message.reply_text("😕 Пожалуйста, уточните, о каком токене вы хотите узнать.")
+        await update.effective_message.reply_text(get_text(lang, 'analysis_missing_token'))
         return
 
     cache_key = payload.lower().strip()
@@ -89,7 +92,7 @@ async def handle_token_analysis(update: Update, context: CallbackContext, payloa
 
     query = f"новости и аналитика криптовалюты {payload}"
     await update.effective_message.reply_text(
-        f"🔍 Ищу и анализирую информацию по запросу: *{payload}*. Это может занять до 30 секунд...",
+        get_text(lang, 'analysis_searching', payload=payload),
         parse_mode=constants.ParseMode.MARKDOWN,
     )
     
@@ -97,7 +100,7 @@ async def handle_token_analysis(update: Update, context: CallbackContext, payloa
         search_results_list = google_search.search(queries=[query])
         
         if not search_results_list or not search_results_list[0].results:
-            await update.effective_message.reply_text("😕 Не удалось найти актуальной информации по вашему запросу.")
+            await update.effective_message.reply_text(get_text(lang, 'analysis_no_info'))
             return
 
         search_results = search_results_list[0].results
@@ -108,7 +111,7 @@ async def handle_token_analysis(update: Update, context: CallbackContext, payloa
 
         analysis_text = await _generate_summary(prompt)
 
-        final_message = f"📊 *Аналитическая сводка по {payload}*\n\n{analysis_text}"
+        final_message = get_text(lang, 'analysis_header', payload=payload, analysis=analysis_text)
         await update.effective_message.reply_text(
             final_message,
             parse_mode=constants.ParseMode.MARKDOWN,
@@ -119,4 +122,4 @@ async def handle_token_analysis(update: Update, context: CallbackContext, payloa
 
     except Exception as e:
         logger.error(f"Ошибка при выполнении анализа токена: {e}", exc_info=True)
-        await update.effective_message.reply_text("💥 Произошла ошибка во время сбора и анализа информации.")
+        await update.effective_message.reply_text(get_text(lang, 'analysis_error'))

@@ -10,6 +10,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 # --- Импорт модулей проекта ---
 from database.engine import AsyncSessionFactory
 from database import operations as db_ops
+from settings.messages import get_text
 from utils.api_clients import coingecko_client
 from crypto.handler import COIN_ID_MAP
 
@@ -61,12 +62,19 @@ async def check_price_alerts():
                 if triggered:
                     logger.info(f"Алерт {alert.id} сработал! User: {alert.user_id}, Symbol: {alert.coin_symbol}, Price: {current_price}")
                     
-                    direction_text = "достигла или превысила" if alert.direction.value == 'above' else "опустилась до или ниже"
-                    message = (
-                        f"🔔 *Сработал Алерт!* 🔔\n\n"
-                        f"Цена *{alert.coin_symbol}* {direction_text} вашей цели!\n\n"
-                        f"🎯 Ваша цель: *${alert.target_price:,.2f}*\n"
-                        f"📈 Текущая цена: *${current_price:,.2f}*"
+                    user = await db_ops.get_user(session, alert.user_id)
+                    lang = user.language if user else 'ru'
+                    if lang == 'ru':
+                        direction_text = 'достигла или превысила' if alert.direction.value == 'above' else 'опустилась до или ниже'
+                    else:
+                        direction_text = 'reached or exceeded' if alert.direction.value == 'above' else 'dropped to or below'
+                    message = get_text(
+                        lang,
+                        'alert_triggered',
+                        symbol=alert.coin_symbol,
+                        direction_text=direction_text,
+                        target_price=f"{alert.target_price:,.2f}",
+                        current_price=f"{current_price:,.2f}"
                     )
                     try:
                         # --- НОВЫЙ НАДЕЖНЫЙ МЕТОД ОТПРАВКИ ---
