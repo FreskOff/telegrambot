@@ -74,15 +74,65 @@ async def delete_user_alerts_by_symbol(session: AsyncSession, user_id: int, symb
     return result.rowcount # Возвращает количество удаленных алертов
 
 # --- Операции с Портфолио ---
-async def add_coin_to_portfolio(session: AsyncSession, user_id: int, symbol: str) -> TrackedCoin:
-    """Добавляет монету в портфолио пользователя, если ее там еще нет."""
-    return TrackedCoin() # Заглушка
+async def add_coin_to_portfolio(
+    session: AsyncSession,
+    user_id: int,
+    symbol: str,
+    quantity: float = 0.0,
+    buy_price: float = 0.0,
+) -> TrackedCoin:
+    """Добавляет монету в портфолио пользователя или обновляет существующую."""
+    symbol = symbol.upper()
+    result = await session.execute(
+        select(TrackedCoin).filter(
+            TrackedCoin.user_id == user_id,
+            TrackedCoin.coin_symbol == symbol,
+        )
+    )
+    coin = result.scalar_one_or_none()
+    if coin:
+        if quantity:
+            total_qty = (coin.quantity or 0) + quantity
+            if total_qty > 0:
+                total_cost = (coin.quantity or 0) * (coin.buy_price or 0) + quantity * buy_price
+                coin.buy_price = total_cost / total_qty
+            coin.quantity = total_qty
+        await session.commit()
+        await session.refresh(coin)
+        return coin
+
+    new_coin = TrackedCoin(
+        user_id=user_id,
+        coin_symbol=symbol,
+        quantity=quantity,
+        buy_price=buy_price,
+    )
+    session.add(new_coin)
+    await session.commit()
+    await session.refresh(new_coin)
+    return new_coin
+
+
 async def get_user_portfolio(session: AsyncSession, user_id: int) -> List[TrackedCoin]:
     """Возвращает список монет в портфолио пользователя."""
-    return [] # Заглушка
+    result = await session.execute(select(TrackedCoin).filter(TrackedCoin.user_id == user_id))
+    return result.scalars().all()
+
+
 async def remove_coin_from_portfolio(session: AsyncSession, user_id: int, symbol: str) -> bool:
     """Удаляет монету из портфолио пользователя."""
-    return False # Заглушка
+    result = await session.execute(
+        select(TrackedCoin).filter(
+            TrackedCoin.user_id == user_id,
+            TrackedCoin.coin_symbol == symbol.upper(),
+        )
+    )
+    coin = result.scalar_one_or_none()
+    if not coin:
+        return False
+    await session.delete(coin)
+    await session.commit()
+    return True
 
 # --- Операции с Историей Чата ---
 async def add_chat_message(session: AsyncSession, user_id: int, role: str, text: str) -> ChatHistory:
