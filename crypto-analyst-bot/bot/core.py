@@ -14,6 +14,7 @@ from crypto.handler import handle_crypto_info_request
 from settings.user import handle_setup_alert, handle_manage_alerts
 from ai.general import handle_general_ai_conversation
 from analysis.handler import handle_token_analysis
+from crypto.pre_market import get_premarket_signals
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,34 @@ async def handle_bot_help(update: Update, context: CallbackContext, payload: str
 async def handle_where_to_buy(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     await update.effective_message.reply_text(f"⏳ Ищу, где купить *{payload}*...", parse_mode=constants.ParseMode.MARKDOWN)
 async def handle_premarket_scan(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
-    await update.effective_message.reply_text("⏳ Сканирую премаркет...", parse_mode=constants.ParseMode.MARKDOWN)
+    await update.effective_message.reply_text(
+        "⏳ Сканирую премаркет...",
+        parse_mode=constants.ParseMode.MARKDOWN,
+    )
+
+    events = await get_premarket_signals()
+    if not events:
+        response = "😕 Не удалось получить актуальные данные."
+    else:
+        lines = []
+        for e in events:
+            name = e.get("token_name")
+            symbol = f"({e['symbol']})" if e.get("symbol") else ""
+            date = f" - {e['event_date']}" if e.get("event_date") else ""
+            lines.append(f"• *{name}* {symbol} — {e['event_type']}{date}")
+        response = "📅 *Предстоящие события:*\n" + "\n".join(lines)
+
+    await update.effective_message.reply_text(
+        response,
+        parse_mode=constants.ParseMode.MARKDOWN,
+        disable_web_page_preview=True,
+    )
+    await db_ops.add_chat_message(
+        session=db_session,
+        user_id=update.effective_user.id,
+        role='model',
+        text=response,
+    )
 async def handle_edu_lesson(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     await update.effective_message.reply_text(f"⏳ Готовлю урок по теме *'{payload}'*...", parse_mode=constants.ParseMode.MARKDOWN)
 async def handle_track_coin(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
