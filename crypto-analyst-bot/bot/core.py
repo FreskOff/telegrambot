@@ -79,7 +79,34 @@ async def handle_premarket_scan(update: Update, context: CallbackContext, payloa
         text=response,
     )
 async def handle_edu_lesson(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
-    await update.effective_message.reply_text(f"⏳ Готовлю урок по теме *'{payload}'*...", parse_mode=constants.ParseMode.MARKDOWN)
+    """Отправляет краткое определение крипто-термина и предлагает мини‑курсы."""
+    if not update.effective_message:
+        return
+
+    from education import get_definition, list_courses
+
+    term_definition = get_definition(payload)
+
+    if term_definition:
+        response = f"📚 *{payload.upper()}* — {term_definition}"
+    else:
+        response = (
+            f"😕 Урок по теме *{payload}* пока не готов. "
+            "В будущем здесь появятся расширенные материалы."
+        )
+
+    await update.effective_message.reply_text(
+        response, parse_mode=constants.ParseMode.MARKDOWN
+    )
+
+    # Небольшое предложение о дополнительных курсах
+    courses = list_courses()
+    if courses:
+        course_lines = [f"• {c.title} — {c.stars_price}⭐" for c in courses]
+        offer = "\n\nДоступны мини‑курсы (оплата звёздами):\n" + "\n".join(course_lines)
+        await update.effective_message.reply_text(
+            offer, parse_mode=constants.ParseMode.MARKDOWN
+        )
 async def handle_track_coin(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     if not payload:
         await update.effective_message.reply_text("Укажите символ монеты.")
