@@ -1,0 +1,24 @@
+# --- Основные фреймворки ---
+fastapi
+uvicorn
+
+# --- Telegram ---
+python-telegram-bot[ext]
+
+# --- Конфигурация ---
+python-dotenv
+
+# --- HTTP-клиент для API ---
+httpx
+
+# --- База данных (PostgreSQL) ---
+sqlalchemy
+asyncpg
+alembic
+
+# --- Фоновые задачи ---
+apscheduler
+
+# --- Веб-скрейпинг (опционально) ---
+beautifulsoup4
+requests
