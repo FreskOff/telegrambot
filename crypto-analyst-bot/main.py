@@ -75,8 +75,8 @@ async def startup_event():
         else:
             logger.error("Не удалось установить вебхук.")
             
-    # --- ИСПРАВЛЕНИЕ: Вызываем start_scheduler без аргументов ---
-    start_scheduler()
+    # Запускаем планировщик фоновых задач
+    start_scheduler(bot)
     logger.info("Планировщик запущен.")
 
 

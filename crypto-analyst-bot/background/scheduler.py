@@ -6,6 +6,7 @@ import os
 import httpx
 from dotenv import load_dotenv
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from telegram import Bot
 
 # --- Импорт модулей проекта ---
 from database.engine import AsyncSessionFactory
@@ -23,6 +24,9 @@ load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 PRIVATE_CHANNEL_ID = os.getenv("PRIVATE_CHANNEL_ID")
+
+# Telegram Bot instance used by scheduler tasks
+tg_bot: Bot | None = None
 
 async def check_price_alerts():
     """
@@ -112,7 +116,7 @@ async def check_subscriptions():
 
             for sub in subs:
                 try:
-                    status = await bot._post(
+                    status = await tg_bot._post(
                         "payments.getStarsStatus",
                         data={"user_id": sub.user_id},
                     )
@@ -130,8 +134,8 @@ async def check_subscriptions():
                     if PRIVATE_CHANNEL_ID:
                         if active:
                             try:
-                                await bot.unban_chat_member(PRIVATE_CHANNEL_ID, sub.user_id)
-                                invite = await bot.export_chat_invite_link(PRIVATE_CHANNEL_ID)
+                                await tg_bot.unban_chat_member(PRIVATE_CHANNEL_ID, sub.user_id)
+                                invite = await tg_bot.export_chat_invite_link(PRIVATE_CHANNEL_ID)
                                 user = await db_ops.get_user(session, sub.user_id)
                                 lang = user.language if user else "ru"
                                 msg = get_text(lang, "subscription_access_granted", link=invite)
@@ -143,7 +147,7 @@ async def check_subscriptions():
                                 logger.error(f"Error granting channel access for {sub.user_id}: {e}")
                         else:
                             try:
-                                await bot.ban_chat_member(PRIVATE_CHANNEL_ID, sub.user_id)
+                                await tg_bot.ban_chat_member(PRIVATE_CHANNEL_ID, sub.user_id)
                             except Exception:
                                 pass
                             user = await db_ops.get_user(session, sub.user_id)
@@ -267,10 +271,10 @@ def schedule_subscription_reminder(user_id: int, next_payment: datetime):
 # --- Управление планировщиком ---
 scheduler = AsyncIOScheduler(timezone="UTC")
 
-def start_scheduler():
-    """
-    Добавляет задачу в планировщик и запускает его.
-    """
+def start_scheduler(bot: Bot):
+    """Запускает планировщик фоновых задач."""
+    global tg_bot
+    tg_bot = bot
     scheduler.add_job(check_price_alerts, 'interval', seconds=60, id='price_check_job', replace_existing=True)
     scheduler.add_job(
         check_subscriptions,
