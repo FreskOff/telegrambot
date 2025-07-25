@@ -162,6 +162,8 @@ async def handle_edu_lesson(update: Update, context: CallbackContext, payload: s
 
     from education import get_definition, list_courses
 
+    await db_ops.increment_request_counter(db_session, update.effective_user.id, "lesson_requests")
+
     lang = context.user_data.get('lang', 'ru')
     term_definition = get_definition(payload)
 

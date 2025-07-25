@@ -24,6 +24,13 @@ class User(Base):
     timezone = Column(String, nullable=False, default="UTC")
     currency = Column(String, nullable=False, default="USD")
     stars_balance = Column(Integer, nullable=False, default=0, comment="Баланс звёзд для платных функций")
+
+    # --- Метрики активности ---
+    price_requests = Column(Integer, nullable=False, default=0)
+    analysis_requests = Column(Integer, nullable=False, default=0)
+    lesson_requests = Column(Integer, nullable=False, default=0)
+    stars_spent = Column(Integer, nullable=False, default=0)
+    last_contact_at = Column(DateTime(timezone=True), nullable=True)
     
     alerts = relationship("PriceAlert", back_populates="user", cascade="all, delete-orphan")
     tracked_coins = relationship("TrackedCoin", back_populates="user", cascade="all, delete-orphan")
