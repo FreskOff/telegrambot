@@ -52,7 +52,7 @@ class CoinGeckoClient:
                 await set_cache(cache_key, json.dumps(data), ttl=45)
                 return data
         except Exception as e:
-            logger.error(f"Ошибка при запросе к CoinGecko API ({url}): {e}")
+            logger.exception(f"Ошибка при запросе к CoinGecko API ({url}): {e}")
             return None
 
     async def get_simple_price(self, coin_ids: List[str], vs_currencies: List[str] = ['usd']) -> Optional[Dict]:
@@ -122,7 +122,7 @@ class CoinMarketCapClient:
                 await set_cache(cache_key, json.dumps(data), ttl=45)
                 return data
         except Exception as e:
-            logger.error(f"Ошибка при запросе к CoinMarketCap API ({url}): {e}")
+            logger.exception(f"Ошибка при запросе к CoinMarketCap API ({url}): {e}")
             return None
 
     async def get_market_pairs(self, symbol: str, limit: int = 5) -> Optional[List[Dict]]:
@@ -166,7 +166,7 @@ class BinanceClient:
                 await set_cache(cache_key, json.dumps(data), ttl=45)
                 return data
         except Exception as e:
-            logger.error(f"Ошибка при запросе к Binance API ({url}): {e}")
+            logger.exception(f"Ошибка при запросе к Binance API ({url}): {e}")
             return None
 
     async def get_price(self, symbol: str) -> Optional[float]:
