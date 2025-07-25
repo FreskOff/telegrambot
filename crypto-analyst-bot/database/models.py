@@ -121,3 +121,17 @@ class Purchase(Base):
     user = relationship('User')
     product = relationship('Product')
 
+
+class Subscription(Base):
+    """Состояние подписки пользователя на приватный канал."""
+
+    __tablename__ = 'subscriptions'
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, ForeignKey('users.id'), nullable=False, index=True)
+    is_active = Column(Boolean, default=False, nullable=False)
+    next_payment = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship('User')
+

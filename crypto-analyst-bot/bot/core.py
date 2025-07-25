@@ -2,6 +2,7 @@
 # Основной модуль логики бота с улучшенной обработкой контекста.
 
 import logging
+import os
 import re
 from telegram import Update, constants, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
@@ -189,6 +190,27 @@ async def handle_buy_product(update: Update, context: CallbackContext, payload: 
     elif product.content_type == "file":
         with open(product.content_value, "rb") as f:
             await update.effective_message.reply_document(f)
+
+
+async def handle_subscribe(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
+    """Отправляет ссылку на оплату подписки через звёзды."""
+    lang = context.user_data.get('lang', 'ru')
+    pay_link = os.getenv('SUBSCRIPTION_LINK')
+    if not pay_link:
+        await update.effective_message.reply_text('Subscription link not configured.')
+        return
+
+    await db_ops.create_or_update_subscription(db_session, update.effective_user.id, is_active=False)
+
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton(get_text(lang, 'subscribe_button'), url=pay_link)]]
+    )
+    await update.effective_message.reply_text(
+        get_text(lang, 'subscribe_info'),
+        reply_markup=keyboard,
+        parse_mode=constants.ParseMode.MARKDOWN,
+        disable_web_page_preview=True,
+    )
 async def handle_track_coin(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     lang = context.user_data.get('lang', 'ru')
     if not payload:
@@ -281,6 +303,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         '/settings': handle_settings_command,
         '/shop': handle_shop,
         '/buy': handle_buy_product,
+        '/subscribe': handle_subscribe,
     }
     for cmd, func in hardcoded_commands.items():
         if user_input.lower().startswith(cmd):

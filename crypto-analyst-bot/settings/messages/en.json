@@ -52,4 +52,7 @@
   "shop_empty": "No goods available.",
   "purchase_success": "\u2705 Purchased *{product}* successfully!",
   "purchase_error": "\u274C Failed to process purchase."
+  ,"subscribe_info": "Subscribe to our premium channel for exclusive reports. Use the button below to pay with stars.",
+  "subscribe_button": "Pay subscription"
+  ,"subscription_reminder": "Your subscription is inactive. Please renew to keep access."
 }

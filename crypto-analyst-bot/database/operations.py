@@ -3,6 +3,7 @@
 
 import logging
 from typing import List, Optional
+from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update as sqlalchemy_update, desc, delete as sqlalchemy_delete
@@ -18,6 +19,7 @@ from .models import (
     ChatHistory,
     Product,
     Purchase,
+    Subscription,
 )
 
 logger = logging.getLogger(__name__)
@@ -229,3 +231,33 @@ async def has_purchased(session: AsyncSession, user_id: int, product_id: int) ->
         select(Purchase).filter(Purchase.user_id == user_id, Purchase.product_id == product_id)
     )
     return result.scalar_one_or_none() is not None
+
+
+# --- Подписки ---
+async def create_or_update_subscription(
+    session: AsyncSession,
+    user_id: int,
+    is_active: bool = False,
+    next_payment: Optional[datetime] = None,
+) -> Subscription:
+    result = await session.execute(select(Subscription).filter(Subscription.user_id == user_id))
+    sub = result.scalar_one_or_none()
+    if sub:
+        sub.is_active = is_active
+        sub.next_payment = next_payment
+    else:
+        sub = Subscription(user_id=user_id, is_active=is_active, next_payment=next_payment)
+        session.add(sub)
+    await session.commit()
+    await session.refresh(sub)
+    return sub
+
+
+async def get_subscription(session: AsyncSession, user_id: int) -> Optional[Subscription]:
+    result = await session.execute(select(Subscription).filter(Subscription.user_id == user_id))
+    return result.scalar_one_or_none()
+
+
+async def get_active_subscriptions(session: AsyncSession) -> List[Subscription]:
+    result = await session.execute(select(Subscription).filter(Subscription.is_active == True))
+    return result.scalars().all()
