@@ -15,6 +15,7 @@ from utils.api_clients import coingecko_client
 from crypto.handler import COIN_ID_MAP
 from crypto.pre_market import get_premarket_signals
 from datetime import datetime
+from analysis.metrics import gather_metrics
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -197,6 +198,37 @@ async def send_premarket_digest():
         except Exception as e:
             logger.error(f"Критическая ошибка в задаче send_premarket_digest: {e}", exc_info=True)
 
+
+async def send_admin_report():
+    """Ежедневный отчёт администратору о ключевых метриках."""
+    admin_id = os.getenv("ADMIN_TELEGRAM_ID")
+    if not admin_id or not TELEGRAM_BOT_TOKEN:
+        return
+    async with AsyncSessionFactory() as session:
+        try:
+            metrics = await gather_metrics(session)
+            top_products = await db_ops.get_most_purchased_products(session, 3)
+            top_requests = await db_ops.get_top_request_types(session, 3)
+            new_subs = await db_ops.new_subscriptions_count(session)
+            lost = await db_ops.inactive_users_count(session)
+            lines = [
+                "\uD83D\uDCCA Daily report:",
+                f"Active users: {metrics['active_users']}",
+                f"Purchase freq: {metrics['purchase_frequency']:.2f}",
+                f"Subscriptions active: {metrics['subscriptions']['active']}/{metrics['subscriptions']['total']}",
+                f"New subs today: {new_subs}",
+                f"Inactive users: {lost}",
+                "Popular products: " + ", ".join(f"{n} ({c})" for n, c in top_products),
+                "Top requests: " + ", ".join(f"{n} ({c})" for n, c in top_requests),
+            ]
+            msg = "\n".join(lines)
+            send_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+            params = {"chat_id": admin_id, "text": msg}
+            async with httpx.AsyncClient() as client:
+                await client.post(send_url, params=params)
+        except Exception as e:
+            logger.error(f"Ошибка в задаче send_admin_report: {e}")
+
 # --- Управление планировщиком ---
 scheduler = AsyncIOScheduler(timezone="UTC")
 
@@ -217,6 +249,13 @@ def start_scheduler():
         'cron',
         hour=8,
         id='premarket_digest_job',
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        send_admin_report,
+        'cron',
+        hour=9,
+        id='admin_report_job',
         replace_existing=True,
     )
     if not scheduler.running:

@@ -566,3 +566,62 @@ async def list_user_course_purchases(session: AsyncSession, user_id: int) -> lis
         select(CoursePurchase).filter(CoursePurchase.user_id == user_id)
     )
     return result.scalars().all()
+
+# --- Административная аналитика ---
+async def list_recent_users(session: AsyncSession, limit: int = 20) -> list[User]:
+    """Возвращает последних зарегистрировавшихся пользователей."""
+    result = await session.execute(
+        select(User).order_by(User.created_at.desc()).limit(limit)
+    )
+    return result.scalars().all()
+
+
+async def list_recent_purchases(session: AsyncSession, limit: int = 20) -> list[Purchase]:
+    """Возвращает последние покупки."""
+    result = await session.execute(
+        select(Purchase).order_by(Purchase.purchased_at.desc()).limit(limit)
+    )
+    return result.scalars().all()
+
+
+async def get_most_purchased_products(session: AsyncSession, limit: int = 5) -> list[tuple[str, int]]:
+    """Возвращает самые популярные товары (имя, количество покупок)."""
+    result = await session.execute(
+        select(Product.name, func.count(Purchase.id))
+        .join(Purchase, Purchase.product_id == Product.id)
+        .group_by(Product.name)
+        .order_by(func.count(Purchase.id).desc())
+        .limit(limit)
+    )
+    return [(row[0], row[1]) for row in result.all()]
+
+
+async def get_top_request_types(session: AsyncSession, limit: int = 5) -> list[tuple[str, int]]:
+    """Возвращает наиболее частые типы запросов."""
+    result = await session.execute(
+        select(ChatHistory.request_type, func.count())
+        .filter(ChatHistory.request_type != None)
+        .group_by(ChatHistory.request_type)
+        .order_by(func.count().desc())
+        .limit(limit)
+    )
+    return [(row[0], row[1]) for row in result.all()]
+
+
+async def new_subscriptions_count(session: AsyncSession, days: int = 1) -> int:
+    """Количество новых подписок за период."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    result = await session.execute(
+        select(func.count()).select_from(Subscription).where(Subscription.created_at >= cutoff)
+    )
+    return result.scalar_one() or 0
+
+
+async def inactive_users_count(session: AsyncSession, days: int = 30) -> int:
+    """Количество пользователей, не проявлявших активность более ``days`` дней."""
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    result = await session.execute(
+        select(func.count()).select_from(User).where(User.last_contact_at < cutoff)
+    )
+    return result.scalar_one() or 0
+
