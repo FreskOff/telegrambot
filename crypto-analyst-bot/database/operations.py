@@ -151,6 +151,7 @@ async def add_coin_to_portfolio(
     symbol: str,
     quantity: float = 0.0,
     buy_price: float = 0.0,
+    buy_date: datetime | None = None,
 ) -> TrackedCoin:
     """Добавляет монету в портфолио пользователя или обновляет существующую."""
     symbol = symbol.upper()
@@ -168,6 +169,8 @@ async def add_coin_to_portfolio(
                 total_cost = (coin.quantity or 0) * (coin.buy_price or 0) + quantity * buy_price
                 coin.buy_price = total_cost / total_qty
             coin.quantity = total_qty
+        if buy_date:
+            coin.purchase_date = buy_date
         await session.commit()
         await session.refresh(coin)
         return coin
@@ -177,6 +180,7 @@ async def add_coin_to_portfolio(
         coin_symbol=symbol,
         quantity=quantity,
         buy_price=buy_price,
+        purchase_date=buy_date,
     )
     session.add(new_coin)
     await session.commit()

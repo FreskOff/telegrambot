@@ -53,6 +53,7 @@ class TrackedCoin(Base):
     coin_symbol = Column(String, nullable=False, index=True)
     quantity = Column(Float, nullable=True, default=0.0)
     buy_price = Column(Float, nullable=True, default=0.0, comment="Цена покупки за единицу")
+    purchase_date = Column(DateTime(timezone=True), nullable=True)
     added_at = Column(DateTime(timezone=True), server_default=func.now())
     user = relationship("User", back_populates="tracked_coins")
 

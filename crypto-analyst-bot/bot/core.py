@@ -24,6 +24,7 @@ from ai.general import handle_general_ai_conversation
 from analysis.handler import handle_token_analysis
 from crypto.pre_market import get_premarket_signals
 from utils.api_clients import coinmarketcap_client, binance_client
+from utils.charts import create_price_chart
 
 logger = logging.getLogger(__name__)
 
@@ -394,13 +395,32 @@ async def handle_portfolio_summary(update: Update, context: CallbackContext, pay
         symbol = parts[1]
         quantity = float(parts[2]) if len(parts) >= 3 else 0.0
         price = float(parts[3]) if len(parts) >= 4 else 0.0
-        await db_ops.add_coin_to_portfolio(db_session, user_id, symbol, quantity, price)
+        buy_date = None
+        if len(parts) >= 5:
+            try:
+                buy_date = datetime.fromisoformat(parts[4])
+            except Exception:
+                buy_date = None
+        await db_ops.add_coin_to_portfolio(db_session, user_id, symbol, quantity, price, buy_date)
         response = get_text(lang, 'portfolio_add', symbol=symbol.upper())
 
     elif action == "remove" and len(parts) >= 2:
         symbol = parts[1]
         removed = await db_ops.remove_coin_from_portfolio(db_session, user_id, symbol)
         response = get_text(lang, 'coin_removed') if removed else "Монета не найдена в портфеле."
+
+    elif action in ("chart", "charts", "graph"):
+        portfolio = await db_ops.get_user_portfolio(db_session, user_id)
+        if not portfolio:
+            response = get_text(lang, 'portfolio_empty')
+        else:
+            await update.effective_message.reply_text(get_text(lang, 'portfolio_chart_start'))
+            for coin in portfolio:
+                chart_path = await create_price_chart(coin.coin_symbol)
+                if chart_path:
+                    with open(chart_path, "rb") as img:
+                        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=img)
+            response = get_text(lang, 'portfolio_chart_sent')
 
     else:
         portfolio = await db_ops.get_user_portfolio(db_session, user_id)
@@ -412,15 +432,25 @@ async def handle_portfolio_summary(update: Update, context: CallbackContext, pay
             price_data = await coingecko_client.get_simple_price(coin_ids)
             lines = [get_text(lang, 'portfolio_header')]
             total_value = 0.0
+            data = []
             for coin in portfolio:
                 coin_id = COIN_ID_MAP.get(coin.coin_symbol)
                 price = price_data.get(coin_id, {}).get("usd", 0)
                 value = (coin.quantity or 0) * price
                 total_value += value
                 profit = value - (coin.quantity or 0) * (coin.buy_price or 0)
-                lines.append(
-                    f"• *{coin.coin_symbol}*: {coin.quantity:g} шт. | текущая цена ${price:,.2f} | P/L ${profit:,.2f}"
+                data.append((profit, coin, price))
+
+            data.sort(key=lambda x: x[0], reverse=True)
+            for profit, coin, price in data:
+                pct = ((price - (coin.buy_price or 0)) / (coin.buy_price or 1)) * 100 if coin.buy_price else 0
+                days = (
+                    f" | { (datetime.utcnow() - coin.purchase_date).days }d" if coin.purchase_date else ""
                 )
+                lines.append(
+                    f"• *{coin.coin_symbol}*: {coin.quantity:g} шт. | текущая цена ${price:,.2f} | P/L ${profit:,.2f} ({pct:+.2f}%)" + days
+                )
+
             lines.append(f"\nВсего: ${total_value:,.2f}")
             response = "\n".join(lines)
 

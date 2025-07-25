@@ -20,6 +20,8 @@
   "coin_removed": "\uD83D\uDDD2 Coin removed.",
   "portfolio_empty": "Your portfolio is empty.",
   "portfolio_header": "\uD83D\uDCB0 *Your portfolio:*\n",
+  "portfolio_chart_start": "\u23F3 Generating charts...",
+  "portfolio_chart_sent": "\u2705 Charts generated.",
   "error_generic": "\uD83D\uDCA5 Oops, something went wrong.",
   "crypto_not_found": "\uD83D\uDE15 I couldn't find info for coins: '{payload}'.",
   "crypto_no_data": "\uD83D\uDCB9 Failed to get price data. API might be temporarily unavailable.",
