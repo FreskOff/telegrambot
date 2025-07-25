@@ -38,6 +38,7 @@ if not WEBHOOK_URL:
 from bot.core import handle_update
 from database.engine import init_db, get_db_session
 from background.scheduler import start_scheduler
+from analysis.metrics import gather_metrics
 
 # --- Инициализация FastAPI ---
 app = FastAPI(title="Crypto AI Analyst Bot", version="1.0.0")
@@ -86,6 +87,11 @@ async def shutdown_event():
 @app.get("/", summary="Статус сервера")
 async def read_root():
     return {"status": "ok", "message": "Crypto AI Analyst Bot is running."}
+
+
+@app.get("/metrics", summary="Базовые метрики")
+async def metrics_endpoint(db_session: AsyncSession = Depends(get_db_session)):
+    return await gather_metrics(db_session)
 
 
 @app.post("/webhook/{token}", summary="Вебхук для Telegram")
