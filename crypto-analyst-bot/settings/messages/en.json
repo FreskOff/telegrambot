@@ -55,7 +55,8 @@
   "purchase_error": "\u274C Failed to process purchase."
   ,"subscribe_info": "Subscribe to our premium channel for exclusive reports. Use the button below to pay with stars.",
   "subscribe_button": "Pay subscription"
-  ,"subscription_reminder": "Your subscription is inactive. Please renew to keep access."
+  ,"subscription_reminder": "Your subscription is inactive. Please renew to keep access.",
+  "subscription_access_granted": "Access granted! Join our premium channel: {link}"
   "course_list_header": "\uD83C\uDF93 Available courses:",
   "course_list_hint": "Details: /course info <id>. Buy: /course buy <id>",
   "course_free": "free",
