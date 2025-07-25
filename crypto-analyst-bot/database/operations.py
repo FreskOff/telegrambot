@@ -3,7 +3,7 @@
 
 import logging
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update as sqlalchemy_update, desc, delete as sqlalchemy_delete
@@ -33,12 +33,17 @@ async def get_or_create_user(session: AsyncSession, tg_user: TelegramUser) -> Us
     result = await session.execute(select(User).filter(User.id == tg_user.id))
     db_user = result.scalar_one_or_none()
     if db_user:
-        # Опционально обновляем данные, если они изменились
-        if db_user.username != tg_user.username or db_user.first_name != tg_user.first_name:
+        updated = False
+        if db_user.username != tg_user.username or db_user.first_name != tg_user.first_name or db_user.last_name != tg_user.last_name:
             db_user.username = tg_user.username
             db_user.first_name = tg_user.first_name
             db_user.last_name = tg_user.last_name
+            updated = True
+        db_user.last_activity_at = datetime.utcnow()
+        updated = True
+        if updated:
             await session.commit()
+            await session.refresh(db_user)
         return db_user
     else:
         new_user = User(
@@ -46,6 +51,7 @@ async def get_or_create_user(session: AsyncSession, tg_user: TelegramUser) -> Us
             username=tg_user.username,
             first_name=tg_user.first_name,
             last_name=tg_user.last_name,
+            last_activity_at=datetime.utcnow(),
         )
         session.add(new_user)
         await session.commit()
