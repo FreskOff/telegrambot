@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import operations as db_ops
 from settings.messages import get_text
 from utils.api_clients import coingecko_client
+from utils import news_api
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -61,8 +62,13 @@ EXTENDED_ANALYSIS_PROMPT = """
 """
 
 
-async def _generate_summary(prompt: str) -> str:
-    """Запрашивает AI-модель (OpenAI GPT-4o или Gemini) и возвращает ответ."""
+async def _generate_summary(prompt: str, symbol: str, db_session: AsyncSession | None = None) -> str:
+    """Запрашивает AI-модель и обогащает запрос новостями."""
+    news = await news_api.get_news(symbol)
+    if news:
+        prompt += "\nАктуальные новости:\n```json\n" + json.dumps(news, ensure_ascii=False, indent=2) + "\n```"
+        if db_session:
+            await db_ops.add_news_articles(db_session, symbol, news)
     if OPENAI_API_KEY:
         headers = {
             "Authorization": f"Bearer {OPENAI_API_KEY}",
@@ -140,14 +146,14 @@ def _write_markdown(text: str) -> str:
         f.write(text)
     return tmp.name
 
-async def _generate_extended_report(symbol: str, search_results: list) -> tuple[str, str, str]:
+async def _generate_extended_report(symbol: str, search_results: list, db_session: AsyncSession) -> tuple[str, str, str]:
     history = await _fetch_price_history(symbol)
     prompt = EXTENDED_ANALYSIS_PROMPT.format(
         user_query=symbol,
         search_results=json.dumps(search_results, indent=2, ensure_ascii=False),
         historical=json.dumps(history, ensure_ascii=False),
     )
-    text = await _generate_summary(prompt)
+    text = await _generate_summary(prompt, symbol, db_session)
     chart = _create_price_chart(history, symbol)
     pdf = _generate_pdf(text, chart)
     md = _write_markdown(text)
@@ -208,13 +214,13 @@ async def handle_token_analysis(update: Update, context: CallbackContext, payloa
 
         search_results = search_results_list[0].results
         if extended:
-            analysis_text, pdf_path, md_path = await _generate_extended_report(token, search_results)
+            analysis_text, pdf_path, md_path = await _generate_extended_report(token, search_results, db_session)
         else:
             prompt = ANALYSIS_PROMPT.format(
                 user_query=token,
                 search_results=json.dumps(search_results, indent=2, ensure_ascii=False),
             )
-            analysis_text = await _generate_summary(prompt)
+            analysis_text = await _generate_summary(prompt, token, db_session)
 
         final_message = get_text(lang, 'analysis_header', payload=token, analysis=analysis_text)
         if extended:

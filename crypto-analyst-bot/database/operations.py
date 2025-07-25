@@ -24,6 +24,7 @@ from .models import (
     Course,
     CoursePurchase,
     UsageStats,
+    NewsArticle,
 )
 from utils import hash_value
 
@@ -624,4 +625,32 @@ async def inactive_users_count(session: AsyncSession, days: int = 30) -> int:
         select(func.count()).select_from(User).where(User.last_contact_at < cutoff)
     )
     return result.scalar_one() or 0
+
+
+# --- Новости ---
+async def add_news_articles(session: AsyncSession, symbol: str, articles: List[dict]):
+    """Сохраняет новости, избегая дубликатов по URL."""
+    for art in articles:
+        result = await session.execute(select(NewsArticle).filter(NewsArticle.url == art.get("url")))
+        if result.scalar_one_or_none():
+            continue
+        article = NewsArticle(
+            symbol=symbol.upper(),
+            title=art.get("title"),
+            url=art.get("url"),
+            source=art.get("source"),
+            published_at=art.get("published_at"),
+        )
+        session.add(article)
+    await session.commit()
+
+
+async def get_recent_news(session: AsyncSession, symbol: str, limit: int = 5) -> List[NewsArticle]:
+    result = await session.execute(
+        select(NewsArticle)
+        .filter(NewsArticle.symbol == symbol.upper())
+        .order_by(desc(NewsArticle.published_at))
+        .limit(limit)
+    )
+    return result.scalars().all()
 
