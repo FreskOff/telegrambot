@@ -1,0 +1,12 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# PyTest cache
+.pytest_cache/
+
+# Uploaded files
+uploads/
+
+# Environment files
+.env
