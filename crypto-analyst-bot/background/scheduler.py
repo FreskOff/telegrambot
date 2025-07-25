@@ -13,6 +13,7 @@ from database import operations as db_ops
 from settings.messages import get_text
 from utils.api_clients import coingecko_client
 from crypto.handler import COIN_ID_MAP
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -90,6 +91,47 @@ async def check_price_alerts():
         except Exception as e:
             logger.error(f"Критическая ошибка в задаче check_price_alerts: {e}", exc_info=True)
 
+
+async def check_subscriptions():
+    """Проверяет статус активных подписок."""
+    logger.info("Scheduler job: Проверка статуса подписок...")
+
+    if not TELEGRAM_BOT_TOKEN:
+        logger.error("Scheduler job: TELEGRAM_BOT_TOKEN не найден.")
+        return
+
+    async with AsyncSessionFactory() as session:
+        try:
+            subs = await db_ops.get_active_subscriptions(session)
+            if not subs:
+                return
+
+            for sub in subs:
+                try:
+                    status = await bot._post(
+                        "payments.getStarsStatus",
+                        data={"user_id": sub.user_id},
+                    )
+                    active = bool(status.get("active")) if isinstance(status, dict) else False
+                    next_ts = status.get("next_payment_date") if isinstance(status, dict) else None
+                    next_payment = datetime.fromtimestamp(next_ts) if next_ts else None
+                    await db_ops.create_or_update_subscription(
+                        session, sub.user_id, is_active=active, next_payment=next_payment
+                    )
+
+                    if not active:
+                        user = await db_ops.get_user(session, sub.user_id)
+                        lang = user.language if user else "ru"
+                        msg = get_text(lang, "subscription_reminder")
+                        send_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+                        params = {"chat_id": sub.user_id, "text": msg}
+                        async with httpx.AsyncClient() as client:
+                            await client.post(send_url, params=params)
+                except Exception as e:
+                    logger.error(f"Ошибка проверки подписки для {sub.user_id}: {e}")
+        except Exception as e:
+            logger.error(f"Критическая ошибка в задаче check_subscriptions: {e}", exc_info=True)
+
 # --- Управление планировщиком ---
 scheduler = AsyncIOScheduler(timezone="UTC")
 
@@ -98,6 +140,7 @@ def start_scheduler():
     Добавляет задачу в планировщик и запускает его.
     """
     scheduler.add_job(check_price_alerts, 'interval', seconds=60, id='price_check_job', replace_existing=True)
+    scheduler.add_job(check_subscriptions, 'interval', hours=6, id='subscription_check_job', replace_existing=True)
     if not scheduler.running:
         scheduler.start()
         logger.info("Планировщик успешно запущен.")
