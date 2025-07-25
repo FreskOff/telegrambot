@@ -16,6 +16,10 @@ if not GEMINI_API_KEY:
     logger.error("Ключ GEMINI_API_KEY не найден.")
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}"
 
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_MODEL = os.getenv("OPENAI_GPT_MODEL", "gpt-4o")
+
 
 # --- ПРОМПТ 1: Строгая классификация намерения ---
 CLASSIFY_INTENT_PROMPT = """
@@ -34,6 +38,9 @@ CLASSIFY_INTENT_PROMPT = """
 - TRACK_COIN: Команда на добавление монеты в портфель.
 - UNTRACK_COIN: Команда на удаление монеты из портфеля.
 - BOT_HELP: Прямой запрос помощи.
+- DEFI_FARM: Запрос доходных ферм.
+- NFT_ANALYTICS: Запрос аналитики по NFT коллекциям.
+- DEPIN_PROJECTS: Запрос проектов из категории DePIN.
 - UNSUPPORTED_INTENT: Все, что не подходит под другие категории.
 
 **Запрос пользователя:** "{user_input}"
@@ -63,6 +70,9 @@ EXTRACT_ENTITIES_PROMPT = """
 - **TRACK_COIN:** Извлеки символ токена в ключ `symbol`. (Например, "добавь рипл" -> `symbol:XRP`)
 - **UNTRACK_COIN:** Извлеки символ токена в ключ `symbol`. (Например, "удали кардано" -> `symbol:ADA`)
 - **WHERE_TO_BUY:** Извлеки символ токена в ключ `symbol`. (Например, "где купить догикоин" -> `symbol:DOGE`)
+- **DEFI_FARM:** Просто верни `payload:` (нет дополнительных параметров).
+- **NFT_ANALYTICS:** Извлеки слаг коллекции в ключ `slug`. (Например, "nft bored ape" -> `slug:bored-ape-yacht-club`)
+- **DEPIN_PROJECTS:** Просто верни `payload:`.
 - **Для всех остальных намерений:** Просто верни `payload:`, если нет очевидных данных для извлечения.
 
 **Твой ответ (в формате `ключ:значение`):**
@@ -70,41 +80,72 @@ EXTRACT_ENTITIES_PROMPT = """
 
 async def classify_intent(user_input: str) -> str:
     """Шаг 1: Определяет только тип намерения."""
-    if not GEMINI_API_KEY: return "UNSUPPORTED_INTENT"
     prompt = CLASSIFY_INTENT_PROMPT.format(user_input=user_input)
-    
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            headers = {'Content-Type': 'application/json'}
-            payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.0, "maxOutputTokens": 32}}
-            response = await client.post(GEMINI_API_URL, json=payload, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            intent_text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "UNSUPPORTED_INTENT").strip()
-            return intent_text if intent_text else "UNSUPPORTED_INTENT"
-    except Exception as e:
-        logger.error(f"Ошибка на шаге 1 (классификация): {e}")
-        return "UNSUPPORTED_INTENT"
+
+    if GEMINI_API_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                headers = {'Content-Type': 'application/json'}
+                payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.0, "maxOutputTokens": 32}}
+                response = await client.post(GEMINI_API_URL, json=payload, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+                intent_text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "UNSUPPORTED_INTENT").strip()
+                if intent_text:
+                    return intent_text
+        except Exception as e:
+            logger.warning(f"Gemini classify failed: {e}")
+
+    if OPENAI_API_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
+                payload = {"model": OPENAI_MODEL, "messages": [{"role": "user", "content": prompt}], "temperature": 0.0, "max_tokens": 32}
+                resp = await client.post(OPENAI_API_URL, json=payload, headers=headers)
+                resp.raise_for_status()
+                data = resp.json()
+                text = data.get("choices", [{}])[0].get("message", {}).get("content", "UNSUPPORTED_INTENT").strip()
+                return text if text else "UNSUPPORTED_INTENT"
+        except Exception as e:
+            logger.error(f"OpenAI classify failed: {e}")
+
+    return "UNSUPPORTED_INTENT"
 
 
 async def extract_entities(intent: str, user_input: str) -> Dict[str, str]:
     """Шаг 2: Извлекает данные для конкретного намерения."""
-    if not GEMINI_API_KEY: return {"payload": "AI_SERVICE_UNCONFIGURED"}
     prompt = EXTRACT_ENTITIES_PROMPT.format(intent=intent, user_input=user_input)
-    
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            headers = {'Content-Type': 'application/json'}
-            payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.0, "maxOutputTokens": 128}}
-            response = await client.post(GEMINI_API_URL, json=payload, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            response_text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "payload:").strip()
-            
-            if ":" in response_text:
-                key, value = response_text.split(":", 1)
-                return {key.strip(): value.strip()}
-            return {"payload": ""}
-    except Exception as e:
-        logger.error(f"Ошибка на шаге 2 (извлечение): {e}")
-        return {"payload": "AI_API_HTTP_ERROR"}
+
+    if GEMINI_API_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                headers = {'Content-Type': 'application/json'}
+                payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.0, "maxOutputTokens": 128}}
+                response = await client.post(GEMINI_API_URL, json=payload, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+                response_text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "payload:").strip()
+                if ":" in response_text:
+                    key, value = response_text.split(":", 1)
+                    return {key.strip(): value.strip()}
+                return {"payload": ""}
+        except Exception as e:
+            logger.warning(f"Gemini extract failed: {e}")
+
+    if OPENAI_API_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
+                payload = {"model": OPENAI_MODEL, "messages": [{"role": "user", "content": prompt}], "temperature": 0.0, "max_tokens": 128}
+                resp = await client.post(OPENAI_API_URL, json=payload, headers=headers)
+                resp.raise_for_status()
+                data = resp.json()
+                text = data.get("choices", [{}])[0].get("message", {}).get("content", "payload:").strip()
+                if ":" in text:
+                    key, value = text.split(":", 1)
+                    return {key.strip(): value.strip()}
+                return {"payload": text}
+        except Exception as e:
+            logger.error(f"OpenAI extract failed: {e}")
+
+    return {"payload": "AI_API_HTTP_ERROR"}

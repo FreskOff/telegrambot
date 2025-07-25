@@ -29,6 +29,9 @@ from crypto.pre_market import get_premarket_signals
 from utils.api_clients import coinmarketcap_client, binance_client
 from utils.charts import create_price_chart
 from analysis.metrics import gather_metrics
+from defi.farming import handle_defi_farming
+from nft.analytics import handle_nft_analytics
+from depin.projects import handle_depin_projects
 
 logger = logging.getLogger(__name__)
 # Main menu keyboard
@@ -682,6 +685,9 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         '/feedback': handle_feedback,
         '/recommend': handle_recommend,
         '/admin': handle_admin_command,
+        '/defi': handle_defi_farming,
+        '/nft': handle_nft_analytics,
+        '/depin': handle_depin_projects,
     }
     for cmd, func in hardcoded_commands.items():
         if user_input.lower().startswith(cmd):
@@ -736,6 +742,9 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
             "UNTRACK_COIN": handle_untrack_coin,
             "PORTFOLIO_SUMMARY": handle_portfolio_summary,
             "BOT_HELP": handle_bot_help,
+            "DEFI_FARM": handle_defi_farming,
+            "NFT_ANALYTICS": handle_nft_analytics,
+            "DEPIN_PROJECTS": handle_depin_projects,
         }
         
         handler = handlers.get(intent, handle_unsupported_request)

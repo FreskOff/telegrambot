@@ -19,6 +19,9 @@ load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}"
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
+OPENAI_MODEL = os.getenv("OPENAI_GPT_MODEL", "gpt-4o")
 
 
 # --- НОВЫЙ ПРОМПТ С ФОКУСОМ НА ЭМПАТИИ ---
@@ -47,7 +50,8 @@ def format_history_for_prompt(history: List[Dict[str, str]]) -> str:
 
 
 async def handle_general_ai_conversation(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
-    if not update.effective_message or not GEMINI_API_KEY: return
+    if not update.effective_message:
+        return
         
     user_id = update.effective_user.id
     user_input = payload
@@ -65,15 +69,31 @@ async def handle_general_ai_conversation(update: Update, context: CallbackContex
             user_input=user_input
         )
 
-        headers = {'Content-Type': 'application/json'}
-        api_payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": { "temperature": 0.7, "maxOutputTokens": 512 }}
+        ai_response = ""
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(GEMINI_API_URL, json=api_payload, headers=headers)
-            response.raise_for_status()
-            
-            api_data = response.json()
-            ai_response = api_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        if GEMINI_API_KEY:
+            headers = {'Content-Type': 'application/json'}
+            api_payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": { "temperature": 0.7, "maxOutputTokens": 512 }}
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(GEMINI_API_URL, json=api_payload, headers=headers)
+                    response.raise_for_status()
+                    api_data = response.json()
+                    ai_response = api_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            except Exception as e:
+                logger.warning(f"Gemini chat failed: {e}")
+
+        if not ai_response and OPENAI_API_KEY:
+            headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
+            payload_oa = {"model": OPENAI_MODEL, "messages": [{"role": "user", "content": prompt}], "temperature": 0.7}
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    resp = await client.post(OPENAI_API_URL, json=payload_oa, headers=headers)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    ai_response = data["choices"][0]["message"]["content"].strip()
+            except Exception as e:
+                logger.error(f"OpenAI chat failed: {e}")
 
         if not ai_response:
             ai_response = get_text(lang, 'ai_generic_empty')
