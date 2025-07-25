@@ -105,5 +105,8 @@
   "nft_header": "🖼 *Stats for {slug}:*",
   "depin_searching": "⏳ Scanning DePIN projects...",
   "depin_no_data": "😕 Failed to get DePIN project data.",
-  "depin_header": "📡 *Top DePIN projects:*"
+  "depin_header": "📡 *Top DePIN projects:*",
+  "news_fetching": "⏳ Fetching latest {symbol} news...",
+  "news_no_data": "😕 No fresh news for {symbol}.",
+  "news_header": "📰 *Latest {symbol} news:*"
 }
