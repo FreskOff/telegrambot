@@ -665,7 +665,13 @@ async def handle_portfolio_summary(update: Update, context: CallbackContext, pay
                 chart_path = await create_price_chart(coin.coin_symbol)
                 if chart_path:
                     with open(chart_path, "rb") as img:
-                        await context.bot.send_photo(chat_id=update.effective_chat.id, photo=img)
+                        await context.bot.send_photo(
+                            chat_id=update.effective_chat.id, photo=img
+                        )
+                    try:
+                        os.remove(chart_path)
+                    except OSError:
+                        pass
             response = get_text(lang, 'portfolio_chart_sent')
 
     else:
