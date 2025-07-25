@@ -3,7 +3,7 @@
 
 import logging
 import re
-from telegram import Update, constants
+from telegram import Update, constants, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -148,6 +148,47 @@ async def handle_edu_lesson(update: Update, context: CallbackContext, payload: s
         await update.effective_message.reply_text(
             offer, parse_mode=constants.ParseMode.MARKDOWN
         )
+
+async def handle_shop(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
+    """Показывает пользователю каталог цифровых товаров."""
+    lang = context.user_data.get('lang', 'ru')
+    products = await db_ops.list_products(db_session)
+    if not products:
+        await update.effective_message.reply_text(get_text(lang, 'shop_empty'))
+        return
+    lines = [get_text(lang, 'shop_header')]
+    for p in products:
+        lines.append(f"{p.id}. *{p.name}* — {p.stars_price}⭐")
+    lines.append(get_text(lang, 'shop_hint'))
+    await update.effective_message.reply_text(
+        "\n".join(lines), parse_mode=constants.ParseMode.MARKDOWN
+    )
+
+async def handle_buy_product(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
+    """Покупает товар по его ID через stars_form."""
+    lang = context.user_data.get('lang', 'ru')
+    if not payload.isdigit():
+        await update.effective_message.reply_text(get_text(lang, 'purchase_error'))
+        return
+    product_id = int(payload)
+    product = await db_ops.get_product(db_session, product_id)
+    if not product:
+        await update.effective_message.reply_text(get_text(lang, 'purchase_error'))
+        return
+    await context.bot._post(
+        "payments.sendStarsForm",
+        data={"user_id": update.effective_user.id, "amount": product.stars_price, "description": product.name},
+    )
+    await db_ops.add_purchase(db_session, update.effective_user.id, product_id)
+    await update.effective_message.reply_text(
+        get_text(lang, 'purchase_success', product=product.name),
+        parse_mode=constants.ParseMode.MARKDOWN,
+    )
+    if product.content_type == "text":
+        await update.effective_message.reply_text(product.content_value)
+    elif product.content_type == "file":
+        with open(product.content_value, "rb") as f:
+            await update.effective_message.reply_document(f)
 async def handle_track_coin(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     lang = context.user_data.get('lang', 'ru')
     if not payload:
@@ -238,6 +279,8 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         '/alerts': handle_manage_alerts,
         '/lang': handle_change_language,
         '/settings': handle_settings_command,
+        '/shop': handle_shop,
+        '/buy': handle_buy_product,
     }
     for cmd, func in hardcoded_commands.items():
         if user_input.lower().startswith(cmd):
