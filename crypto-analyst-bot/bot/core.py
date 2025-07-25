@@ -39,6 +39,10 @@ from utils.intent_router import IntentRouter
 logger = logging.getLogger(__name__)
 router = IntentRouter()
 
+# Стоимость подписки в звёздах и описание платежа
+SUBSCRIPTION_PRICE = int(os.getenv("SUBSCRIPTION_PRICE", "20"))
+SUBSCRIPTION_DESC = os.getenv("SUBSCRIPTION_DESC", "Channel subscription")
+
 # Регистрация обработчиков намерений
 router.register("GENERAL_CHAT", handle_general_ai_conversation)
 router.register("CRYPTO_INFO", handle_crypto_info_request)
@@ -147,13 +151,19 @@ async def handle_premarket_scan(update: Update, context: CallbackContext, payloa
     # --- Проверяем подписку пользователя ---
     subscription = await db_ops.get_subscription(db_session, update.effective_user.id)
     if not subscription or not subscription.is_active:
-        pay_link = os.getenv('SUBSCRIPTION_LINK')
         reminder = get_text(lang, 'subscription_reminder')
-        if pay_link:
-            kb = InlineKeyboardMarkup([[InlineKeyboardButton(get_text(lang, 'subscribe_button'), url=pay_link)]])
-            await update.effective_message.reply_text(reminder, reply_markup=kb)
-        else:
-            await update.effective_message.reply_text(reminder)
+        try:
+            await context.bot._post(
+                "payments.sendStarsForm",
+                data={
+                    "user_id": update.effective_user.id,
+                    "amount": SUBSCRIPTION_PRICE,
+                    "description": SUBSCRIPTION_DESC,
+                },
+            )
+        except Exception as e:
+            logger.error(f"Subscription form error for {update.effective_user.id}: {e}")
+        await update.effective_message.reply_text(reminder)
         return
 
     params = {}
@@ -464,25 +474,27 @@ async def handle_admin_command(update: Update, context: CallbackContext, payload
 
 
 async def handle_subscribe(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
-    """Отправляет ссылку на оплату подписки через звёзды."""
+    """Открывает форму оплаты подписки через Telegram Stars."""
     lang = context.user_data.get('lang', 'ru')
-    pay_link = os.getenv('SUBSCRIPTION_LINK')
-    if not pay_link:
-        await update.effective_message.reply_text(get_text(lang, 'subscription_link_missing'))
-        return
-
     level = 'premium' if 'premium' in payload.lower() else 'basic'
     await db_ops.create_or_update_subscription(db_session, update.effective_user.id, is_active=False, level=level)
 
-    keyboard = InlineKeyboardMarkup(
-        [[InlineKeyboardButton(get_text(lang, 'subscribe_button'), url=pay_link)]]
-    )
-    await update.effective_message.reply_text(
-        get_text(lang, 'subscribe_info'),
-        reply_markup=keyboard,
-        parse_mode=constants.ParseMode.MARKDOWN,
-        disable_web_page_preview=True,
-    )
+    try:
+        await context.bot._post(
+            "payments.sendStarsForm",
+            data={
+                "user_id": update.effective_user.id,
+                "amount": SUBSCRIPTION_PRICE,
+                "description": SUBSCRIPTION_DESC,
+            },
+        )
+        await update.effective_message.reply_text(
+            get_text(lang, 'subscribe_info'),
+            parse_mode=constants.ParseMode.MARKDOWN,
+        )
+    except Exception as e:
+        logger.error(f"Subscription payment failed for {update.effective_user.id}: {e}")
+        await update.effective_message.reply_text(get_text(lang, 'subscription_link_missing'))
 
 async def handle_stars_payment(update: Update, context: CallbackContext, db_session: AsyncSession):
     """Обновляет статус подписки после оплаты звёздами."""

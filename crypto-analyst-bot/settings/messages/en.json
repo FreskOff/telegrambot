@@ -55,7 +55,7 @@
   "shop_empty": "No goods available.",
   "purchase_success": "✅ Purchased *{product}* successfully!",
   "purchase_error": "❌ Failed to process purchase.",
-  "subscribe_info": "Subscribe to our premium channel for exclusive reports. Use the button below to pay with stars.",
+  "subscribe_info": "Subscribe to our premium channel. A payment form will open in Telegram.",
   "subscribe_button": "Pay subscription",
   "subscription_reminder": "Your subscription is inactive. Please renew to keep access.",
   "subscription_access_granted": "Access granted! Join our premium channel: {link}",
