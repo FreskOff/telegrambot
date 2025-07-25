@@ -64,10 +64,26 @@ class TrackedCoin(Base):
     added_at = Column(DateTime(timezone=True), server_default=func.now())
     user = relationship("User", back_populates="tracked_coins")
 
+
+class Dialog(Base):
+    """Группирует сообщения в рамках одного диалога."""
+
+    __tablename__ = 'dialogs'
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, ForeignKey('users.id'), nullable=False, index=True)
+    topic = Column(String, nullable=True)
+    started_at = Column(DateTime(timezone=True), server_default=func.now())
+    ended_at = Column(DateTime(timezone=True), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    user = relationship('User')
+
 class ChatHistory(Base):
     __tablename__ = 'chat_history'
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(BigInteger, ForeignKey('users.id'), nullable=False, index=True)
+    dialog_id = Column(Integer, ForeignKey('dialogs.id'), nullable=True, index=True)
     role = Column(String, nullable=False)
     message_text = Column(Text, nullable=False)
     username_hash = Column(String, nullable=True)
@@ -82,6 +98,7 @@ class ChatHistory(Base):
     event = Column(String, nullable=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     user = relationship("User", back_populates="chat_history")
+    dialog = relationship("Dialog")
 
 # --- Новые таблицы для будущего функционала ---
 

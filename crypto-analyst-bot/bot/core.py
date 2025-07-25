@@ -577,8 +577,16 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
     db_user = await db_ops.get_or_create_user(session=db_session, tg_user=user)
     logger.info(f"Обработка сообщения от {db_user.id}: '{user_input}'")
     context.user_data['lang'] = db_user.language
-    
-    user_msg = await db_ops.add_chat_message(session=db_session, user_id=user.id, role='user', text=user_input)
+    lang = context.user_data.get('lang', 'ru')
+
+    dialog = await db_ops.start_dialog(db_session, user.id)
+    user_msg = await db_ops.add_chat_message(
+        session=db_session,
+        user_id=user.id,
+        role='user',
+        text=user_input,
+        dialog_id=dialog.id,
+    )
 
     # --- Обработка встроенных команд БЕЗ AI ---
     hardcoded_commands = {
@@ -609,6 +617,15 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         # Шаг 1: Классификация
         intent = await classify_intent(user_input)
         logger.info(f"Шаг 1: Намерение определено как '{intent}'")
+        if not dialog.topic:
+            await db_ops.update_dialog(db_session, dialog.id, topic=intent)
+        top_topics = await db_ops.get_top_user_topics(db_session, user.id)
+        if top_topics:
+            hint = get_text(lang, 'top_topics_hint', topics=", ".join(top_topics))
+            kb = InlineKeyboardMarkup(
+                [[InlineKeyboardButton(get_text(lang, 'full_report_btn'), callback_data='buy_report')]]
+            )
+            await message.reply_text(hint, reply_markup=kb)
 
         # Шаг 2: Извлечение данных
         entities = await extract_entities(intent, user_input)
