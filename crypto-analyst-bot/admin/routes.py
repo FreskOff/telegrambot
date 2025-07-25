@@ -48,9 +48,15 @@ async def get_user_details(user_id: int, authorized: bool = Depends(verify_crede
     }
 
 @router.post("/users/{user_id}/subscription")
-async def set_subscription(user_id: int, active: bool, authorized: bool = Depends(verify_credentials), db: AsyncSession = Depends(get_db_session)):
-    sub = await db_ops.create_or_update_subscription(db, user_id, is_active=active)
-    return {"user_id": user_id, "active": sub.is_active}
+async def set_subscription(
+    user_id: int,
+    active: bool,
+    level: str = "premium",
+    authorized: bool = Depends(verify_credentials),
+    db: AsyncSession = Depends(get_db_session),
+):
+    sub = await db_ops.create_or_update_subscription(db, user_id, is_active=active, level=level)
+    return {"user_id": user_id, "active": sub.is_active, "level": sub.level}
 
 # --- Products management ---
 @router.post("/products")

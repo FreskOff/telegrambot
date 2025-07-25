@@ -5,6 +5,7 @@
 import os
 import logging
 import json
+from datetime import datetime
 import uvicorn
 from fastapi import FastAPI, Request, Response, Depends
 from dotenv import load_dotenv
@@ -40,6 +41,8 @@ from database.engine import init_db, get_db_session
 from background.scheduler import start_scheduler
 from analysis.metrics import gather_metrics
 from admin.routes import router as admin_router
+from database import operations as db_ops
+from settings.messages import get_text
 
 # --- Инициализация FastAPI ---
 app = FastAPI(title="Crypto AI Analyst Bot", version="1.0.0")
@@ -94,6 +97,50 @@ async def read_root():
 @app.get("/metrics", summary="Базовые метрики")
 async def metrics_endpoint(db_session: AsyncSession = Depends(get_db_session)):
     return await gather_metrics(db_session)
+
+
+@app.post("/payments/callback", summary="Payment webhook")
+async def payments_callback(
+    request: Request,
+    db_session: AsyncSession = Depends(get_db_session),
+):
+    data = await request.json()
+    user_id = data.get("user_id")
+    if not user_id:
+        return {"ok": False}
+
+    event_type = data.get("type")
+    lang = "ru"
+    user = await db_ops.get_user(db_session, user_id)
+    if user:
+        lang = user.language
+
+    if event_type == "stars":
+        amount = int(data.get("amount", 0))
+        if amount:
+            await db_ops.add_stars(db_session, user_id, amount)
+            await bot.send_message(user_id, get_text(lang, "purchase_success", product=f"+{amount}⭐"))
+    elif event_type == "product":
+        product_id = data.get("product_id")
+        product = await db_ops.get_product(db_session, product_id) if product_id else None
+        if product and not await db_ops.has_purchased(db_session, user_id, product_id):
+            await db_ops.add_purchase(db_session, user_id, product_id)
+            await bot.send_message(user_id, get_text(lang, "purchase_success", product=product.name))
+            try:
+                if product.content_type == "text":
+                    await bot.send_message(user_id, product.content_value)
+                elif product.content_type == "file":
+                    with open(product.content_value, "rb") as f:
+                        await bot.send_document(user_id, f)
+            except Exception:
+                pass
+    elif event_type == "subscription":
+        level = data.get("level", "basic")
+        next_ts = data.get("next_payment_date")
+        next_payment = datetime.fromtimestamp(next_ts) if next_ts else None
+        await db_ops.create_or_update_subscription(db_session, user_id, is_active=True, next_payment=next_payment, level=level)
+        await bot.send_message(user_id, get_text(lang, f"subscription_{level}"))
+    return {"ok": True}
 
 
 @app.post("/webhook/{token}", summary="Вебхук для Telegram")

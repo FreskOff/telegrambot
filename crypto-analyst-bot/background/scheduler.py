@@ -118,7 +118,11 @@ async def check_subscriptions():
                     next_ts = status.get("next_payment_date") if isinstance(status, dict) else None
                     next_payment = datetime.fromtimestamp(next_ts) if next_ts else None
                     await db_ops.create_or_update_subscription(
-                        session, sub.user_id, is_active=active, next_payment=next_payment
+                        session,
+                        sub.user_id,
+                        is_active=active,
+                        next_payment=next_payment,
+                        level=sub.level,
                     )
 
                     if PRIVATE_CHANNEL_ID:
