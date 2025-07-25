@@ -43,5 +43,9 @@
   "currency_set": "Currency set to {cur}.",
   "settings_overview": "Your settings:\nLanguage: {language}\nTimezone: {timezone}\nCurrency: {currency}\nTotal requests: {message_count}",
   "settings_prompt": "Choose an option: language, timezone or currency.",
-  "alert_triggered": "\uD83D\uDD14 *Alert triggered!* \uD83D\uDD14\n\nPrice of *{symbol}* has {direction_text} your target!\n\n\uD83C\uDFC6 Target: *${target_price}*\n\uD83D\uDCC8 Current price: *${current_price}*"
+  "alert_triggered": "\uD83D\uDD14 *Alert triggered!* \uD83D\uDD14\n\nPrice of *{symbol}* has {direction_text} your target!\n\n\uD83C\uDFC6 Target: *${target_price}*\n\uD83D\uDCC8 Current price: *${current_price}*",
+  "analysis_full_offer": "A full report costs {price}⭐. Deduct stars?",
+  "analysis_full_insufficient_stars": "Not enough stars on balance.",
+  "analysis_full_ready": "Done! Sending extended report..."
 }
+
