@@ -38,6 +38,8 @@ from utils.charts import create_price_chart
 from analysis.metrics import gather_metrics
 from defi.farming import handle_defi_farming
 from nft.analytics import handle_nft_analytics
+from background.scheduler import schedule_subscription_reminder
+from config import ADMIN_ID
 from depin.projects import handle_depin_projects
 from crypto.news import handle_news_command
 from ai.prediction import handle_predict_command
@@ -473,6 +475,44 @@ async def handle_admin_command(update: Update, context: CallbackContext, payload
         await update.effective_message.reply_text("Unknown admin command")
 
 
+async def handle_my_subscription(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
+    """Inform user about subscription end date."""
+    lang = context.user_data.get('lang', 'ru')
+    date_str = await db_ops.get_subscription_end_date(db_session, update.effective_user.id)
+    if date_str:
+        await update.effective_message.reply_text(get_text(lang, 'subscription_until', date=date_str))
+    else:
+        await update.effective_message.reply_text(get_text(lang, 'subscription_none'))
+
+
+async def admin_stats(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
+    user_id = update.effective_user.id
+    if ADMIN_ID and user_id != ADMIN_ID:
+        return
+    total_users = await db_ops.total_users(db_session)
+    active_subs = len(await db_ops.get_active_subscriptions(db_session))
+    await update.effective_message.reply_text(
+        f"\uD83D\uDCCA Stats:\nUsers: {total_users}\nActive subs: {active_subs}"
+    )
+
+
+async def broadcast_command(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
+    user_id = update.effective_user.id
+    if ADMIN_ID and user_id != ADMIN_ID:
+        return
+    text_to_send = payload.strip()
+    if not text_to_send:
+        await update.effective_message.reply_text("Usage: /broadcast <message>")
+        return
+    users = await db_ops.list_recent_users(db_session, 1000000)
+    for u in users:
+        try:
+            await context.bot.send_message(u.id, text_to_send)
+        except Exception:
+            pass
+    await update.effective_message.reply_text("Broadcast started.")
+
+
 async def handle_subscribe(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     """Открывает форму оплаты подписки через Telegram Stars."""
     lang = context.user_data.get('lang', 'ru')
@@ -509,6 +549,8 @@ async def handle_stars_payment(update: Update, context: CallbackContext, db_sess
             next_payment=next_payment,
             level=level,
         )
+        if active and next_payment:
+            schedule_subscription_reminder(user_id, next_payment)
 
         stars_info = getattr(update.effective_message, 'stars', None)
         if stars_info:
@@ -721,6 +763,9 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         '/feedback': handle_feedback,
         '/recommend': handle_recommend,
         '/admin': handle_admin_command,
+        '/my_subscription': handle_my_subscription,
+        '/stats': admin_stats,
+        '/broadcast': broadcast_command,
         '/defi': handle_defi_farming,
         '/nft': handle_nft_analytics,
         '/depin': handle_depin_projects,

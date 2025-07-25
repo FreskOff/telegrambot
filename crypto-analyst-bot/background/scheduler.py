@@ -14,7 +14,7 @@ from settings.messages import get_text
 from utils.api_clients import coingecko_client
 from crypto.handler import COIN_ID_MAP
 from crypto.pre_market import get_premarket_signals
-from datetime import datetime
+from datetime import datetime, timedelta
 from analysis.metrics import gather_metrics
 from ai.prediction import update_prediction_cache
 
@@ -229,6 +229,40 @@ async def send_admin_report():
                 await client.post(send_url, params=params)
         except Exception as e:
             logger.error(f"Ошибка в задаче send_admin_report: {e}")
+
+
+async def send_subscription_reminder(user_id: int):
+    """Send reminder message about expiring subscription."""
+    if not TELEGRAM_BOT_TOKEN:
+        return
+    async with AsyncSessionFactory() as session:
+        user = await db_ops.get_user(session, user_id)
+        if not user:
+            return
+        lang = user.language
+        msg = get_text(lang, "subscription_expiring")
+        send_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        params = {"chat_id": user_id, "text": msg}
+        async with httpx.AsyncClient() as client:
+            await client.post(send_url, params=params)
+
+
+def schedule_subscription_reminder(user_id: int, next_payment: datetime):
+    """Schedule reminder 3 days before subscription end."""
+    if not next_payment:
+        return
+    remind_at = next_payment - timedelta(days=3)
+    if remind_at <= datetime.utcnow():
+        return
+    job_id = f"reminder_{user_id}"
+    scheduler.add_job(
+        send_subscription_reminder,
+        'date',
+        run_date=remind_at,
+        args=[user_id],
+        id=job_id,
+        replace_existing=True,
+    )
 
 # --- Управление планировщиком ---
 scheduler = AsyncIOScheduler(timezone="UTC")

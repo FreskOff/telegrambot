@@ -541,6 +541,20 @@ async def get_active_subscriptions(session: AsyncSession) -> List[Subscription]:
     return result.scalars().all()
 
 
+async def get_subscription_end_date(session: AsyncSession, user_id: int) -> str | None:
+    """Return subscription end date as DD.MM.YYYY string or None."""
+    sub = await get_subscription(session, user_id)
+    if sub and sub.next_payment:
+        return sub.next_payment.strftime('%d.%m.%Y')
+    return None
+
+
+async def total_users(session: AsyncSession) -> int:
+    """Return total number of registered users."""
+    result = await session.execute(select(func.count()).select_from(User))
+    return result.scalar_one() or 0
+
+
 # --- Курсы и покупки курсов ---
 async def list_courses(session: AsyncSession):
     result = await session.execute(select(Course).filter(Course.is_active == True))
