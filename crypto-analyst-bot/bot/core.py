@@ -99,7 +99,25 @@ async def handle_premarket_scan(update: Update, context: CallbackContext, payloa
         parse_mode=constants.ParseMode.MARKDOWN,
     )
 
-    events = await get_premarket_signals()
+    # --- Проверяем подписку пользователя ---
+    subscription = await db_ops.get_subscription(db_session, update.effective_user.id)
+
+    params = {}
+    for part in payload.split():
+        if '=' in part:
+            key, value = part.split('=', 1)
+            params[key.lower()] = value
+
+    event_type = params.get('type')
+    min_cap = float(params.get('mincap', 0) or 0)
+    max_cap = float(params['maxcap']) if 'maxcap' in params else None
+
+    events = await get_premarket_signals(
+        vip=bool(subscription and subscription.is_active),
+        event_type=event_type,
+        min_market_cap=min_cap,
+        max_market_cap=max_cap,
+    )
     if not events:
         response = get_text(lang, 'premarket_no_data')
     else:
@@ -108,7 +126,11 @@ async def handle_premarket_scan(update: Update, context: CallbackContext, payloa
             name = e.get("token_name")
             symbol = f"({e['symbol']})" if e.get("symbol") else ""
             date = f" - {e['event_date']}" if e.get("event_date") else ""
-            lines.append(f"• *{name}* {symbol} — {e['event_type']}{date}")
+            platform = f" [{e['platform']}]" if e.get("platform") else ""
+            importance = f" ({e['importance']})" if e.get("importance") else ""
+            lines.append(
+                f"• *{name}* {symbol} — {e['event_type']}{date}{importance}{platform}"
+            )
         response = get_text(lang, 'premarket_header') + "\n" + "\n".join(lines)
 
     await update.effective_message.reply_text(

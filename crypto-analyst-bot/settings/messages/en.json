@@ -12,6 +12,7 @@
   "premarket_scanning": "\u23F3 Scanning pre\u2011market...",
   "premarket_no_data": "\uD83D\uDE15 Couldn't get current data.",
   "premarket_header": "\uD83D\uDCC5 *Upcoming events:*",
+  "premarket_digest_header": "\uD83D\uDCC5 *Daily pre-market digest:*",
   "edu_unknown": "\uD83D\uDE15 Lesson on *{topic}* isn't ready yet. Expanded materials will appear later.",
   "course_offer": "Mini\u2011courses available (paid with stars):\n{courses}",
   "track_missing_symbol": "Specify a coin symbol.",

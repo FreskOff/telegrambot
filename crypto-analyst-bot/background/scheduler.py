@@ -13,6 +13,7 @@ from database import operations as db_ops
 from settings.messages import get_text
 from utils.api_clients import coingecko_client
 from crypto.handler import COIN_ID_MAP
+from crypto.pre_market import get_premarket_signals
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -132,6 +133,47 @@ async def check_subscriptions():
         except Exception as e:
             logger.error(f"Критическая ошибка в задаче check_subscriptions: {e}", exc_info=True)
 
+
+async def send_premarket_digest():
+    """Отправляет ежедневный дайджест предстоящих событий VIP-подписчикам."""
+    logger.info("Scheduler job: Отправка ежедневного премаркет-дайджеста...")
+
+    if not TELEGRAM_BOT_TOKEN:
+        logger.error("Scheduler job: TELEGRAM_BOT_TOKEN не найден.")
+        return
+
+    async with AsyncSessionFactory() as session:
+        try:
+            subs = await db_ops.get_active_subscriptions(session)
+            if not subs:
+                return
+
+            events = await get_premarket_signals(vip=True)
+            if not events:
+                return
+
+            lines = []
+            for e in events:
+                name = e.get("token_name")
+                symbol = f"({e['symbol']})" if e.get("symbol") else ""
+                date = f" - {e['event_date']}" if e.get("event_date") else ""
+                platform = f" [{e['platform']}]" if e.get("platform") else ""
+                importance = f" ({e['importance']})" if e.get("importance") else ""
+                lines.append(
+                    f"• *{name}* {symbol} — {e['event_type']}{date}{importance}{platform}"
+                )
+
+            for sub in subs:
+                user = await db_ops.get_user(session, sub.user_id)
+                lang = user.language if user else 'ru'
+                msg = get_text(lang, 'premarket_digest_header') + "\n" + "\n".join(lines)
+                send_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+                params = {"chat_id": sub.user_id, "text": msg, "parse_mode": "Markdown"}
+                async with httpx.AsyncClient() as client:
+                    await client.post(send_url, params=params)
+        except Exception as e:
+            logger.error(f"Критическая ошибка в задаче send_premarket_digest: {e}", exc_info=True)
+
 # --- Управление планировщиком ---
 scheduler = AsyncIOScheduler(timezone="UTC")
 
@@ -141,6 +183,13 @@ def start_scheduler():
     """
     scheduler.add_job(check_price_alerts, 'interval', seconds=60, id='price_check_job', replace_existing=True)
     scheduler.add_job(check_subscriptions, 'interval', hours=6, id='subscription_check_job', replace_existing=True)
+    scheduler.add_job(
+        send_premarket_digest,
+        'cron',
+        hour=8,
+        id='premarket_digest_job',
+        replace_existing=True,
+    )
     if not scheduler.running:
         scheduler.start()
         logger.info("Планировщик успешно запущен.")
