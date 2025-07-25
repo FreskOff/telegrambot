@@ -19,6 +19,7 @@ from database import operations as db_ops
 from settings.messages import get_text
 from utils.api_clients import coingecko_client
 from utils import news_api
+from utils import google_search
 
 logger = logging.getLogger(__name__)
 load_dotenv()
