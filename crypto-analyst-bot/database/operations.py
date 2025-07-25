@@ -331,6 +331,44 @@ async def get_product(session: AsyncSession, product_id: int):
     result = await session.execute(select(Product).filter(Product.id == product_id))
     return result.scalar_one_or_none()
 
+async def create_product(
+    session: AsyncSession,
+    name: str,
+    description: str,
+    item_type: str,
+    stars_price: int,
+    content_type: str,
+    content_value: str,
+    rating: int = 0,
+    is_active: bool = True,
+) -> Product:
+    product = Product(
+        name=name,
+        description=description,
+        rating=rating,
+        item_type=item_type,
+        stars_price=stars_price,
+        content_type=content_type,
+        content_value=content_value,
+        is_active=is_active,
+    )
+    session.add(product)
+    await session.commit()
+    await session.refresh(product)
+    return product
+
+async def update_product(session: AsyncSession, product_id: int, **kwargs) -> None:
+    if not kwargs:
+        return
+    await session.execute(
+        sqlalchemy_update(Product).where(Product.id == product_id).values(**kwargs)
+    )
+    await session.commit()
+
+async def delete_product(session: AsyncSession, product_id: int) -> None:
+    await session.execute(sqlalchemy_delete(Product).where(Product.id == product_id))
+    await session.commit()
+
 async def add_purchase(session: AsyncSession, user_id: int, product_id: int):
     purchase = Purchase(user_id=user_id, product_id=product_id)
     session.add(purchase)
@@ -386,6 +424,40 @@ async def list_courses(session: AsyncSession):
 async def get_course(session: AsyncSession, course_id: int):
     result = await session.execute(select(Course).filter(Course.id == course_id))
     return result.scalar_one_or_none()
+
+async def create_course(
+    session: AsyncSession,
+    title: str,
+    description: str,
+    stars_price: int,
+    content_type: str,
+    file_id: Optional[str] = None,
+    is_active: bool = True,
+) -> Course:
+    course = Course(
+        title=title,
+        description=description,
+        stars_price=stars_price,
+        content_type=content_type,
+        file_id=file_id,
+        is_active=is_active,
+    )
+    session.add(course)
+    await session.commit()
+    await session.refresh(course)
+    return course
+
+async def update_course(session: AsyncSession, course_id: int, **kwargs) -> None:
+    if not kwargs:
+        return
+    await session.execute(
+        sqlalchemy_update(Course).where(Course.id == course_id).values(**kwargs)
+    )
+    await session.commit()
+
+async def delete_course(session: AsyncSession, course_id: int) -> None:
+    await session.execute(sqlalchemy_delete(Course).where(Course.id == course_id))
+    await session.commit()
 
 
 async def add_course_purchase(session: AsyncSession, user_id: int, course_id: int):

@@ -39,9 +39,11 @@ from bot.core import handle_update
 from database.engine import init_db, get_db_session
 from background.scheduler import start_scheduler
 from analysis.metrics import gather_metrics
+from admin.routes import router as admin_router
 
 # --- Инициализация FastAPI ---
 app = FastAPI(title="Crypto AI Analyst Bot", version="1.0.0")
+app.include_router(admin_router)
 
 # --- Инициализация Telegram Bot API ---
 application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
