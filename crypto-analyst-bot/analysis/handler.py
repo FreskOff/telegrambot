@@ -188,12 +188,15 @@ async def handle_token_analysis(update: Update, context: CallbackContext, payloa
     )
 
     if extended:
-        balance = await db_ops.get_star_balance(db_session, user_id)
-        if balance < EXTENDED_ANALYSIS_PRICE:
-            await update.effective_message.reply_text(
-                get_text(lang, 'analysis_premium_insufficient', price=EXTENDED_ANALYSIS_PRICE)
-            )
-            return
+        subscription = await db_ops.get_subscription(db_session, user_id)
+        premium = subscription and subscription.is_active and subscription.level == 'premium'
+        if not premium:
+            balance = await db_ops.get_star_balance(db_session, user_id)
+            if balance < EXTENDED_ANALYSIS_PRICE:
+                await update.effective_message.reply_text(
+                    get_text(lang, 'analysis_premium_insufficient', price=EXTENDED_ANALYSIS_PRICE)
+                )
+                return
         await update.effective_message.reply_text(get_text(lang, 'analysis_premium_start'))
     
     try:
@@ -215,7 +218,8 @@ async def handle_token_analysis(update: Update, context: CallbackContext, payloa
 
         final_message = get_text(lang, 'analysis_header', payload=token, analysis=analysis_text)
         if extended:
-            await db_ops.deduct_stars(db_session, user_id, EXTENDED_ANALYSIS_PRICE)
+            if not premium:
+                await db_ops.deduct_stars(db_session, user_id, EXTENDED_ANALYSIS_PRICE)
             with open(pdf_path, 'rb') as pf:
                 await update.effective_message.reply_document(pf, filename=f"{token}_report.pdf", caption=final_message, parse_mode=constants.ParseMode.MARKDOWN)
             with open(md_path, 'rb') as mf:

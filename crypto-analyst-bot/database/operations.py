@@ -465,14 +465,16 @@ async def create_or_update_subscription(
     user_id: int,
     is_active: bool = False,
     next_payment: Optional[datetime] = None,
+    level: str = "basic",
 ) -> Subscription:
     result = await session.execute(select(Subscription).filter(Subscription.user_id == user_id))
     sub = result.scalar_one_or_none()
     if sub:
         sub.is_active = is_active
         sub.next_payment = next_payment
+        sub.level = level or sub.level
     else:
-        sub = Subscription(user_id=user_id, is_active=is_active, next_payment=next_payment)
+        sub = Subscription(user_id=user_id, is_active=is_active, next_payment=next_payment, level=level)
         session.add(sub)
     await session.commit()
     await session.refresh(sub)

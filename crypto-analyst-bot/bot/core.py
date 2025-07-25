@@ -137,7 +137,7 @@ async def handle_premarket_scan(update: Update, context: CallbackContext, payloa
     max_cap = float(params['maxcap']) if 'maxcap' in params else None
 
     events = await get_premarket_signals(
-        vip=bool(subscription and subscription.is_active),
+        vip=bool(subscription and subscription.is_active and subscription.level == 'premium'),
         event_type=event_type,
         min_market_cap=min_cap,
         max_market_cap=max_cap,
@@ -376,7 +376,8 @@ async def handle_subscribe(update: Update, context: CallbackContext, payload: st
         await update.effective_message.reply_text(get_text(lang, 'subscription_link_missing'))
         return
 
-    await db_ops.create_or_update_subscription(db_session, update.effective_user.id, is_active=False)
+    level = 'premium' if 'premium' in payload.lower() else 'basic'
+    await db_ops.create_or_update_subscription(db_session, update.effective_user.id, is_active=False, level=level)
 
     keyboard = InlineKeyboardMarkup(
         [[InlineKeyboardButton(get_text(lang, 'subscribe_button'), url=pay_link)]]
@@ -399,9 +400,21 @@ async def handle_stars_payment(update: Update, context: CallbackContext, db_sess
         active = bool(status.get('active')) if isinstance(status, dict) else False
         next_ts = status.get('next_payment_date') if isinstance(status, dict) else None
         next_payment = datetime.fromtimestamp(next_ts) if next_ts else None
+        sub = await db_ops.get_subscription(db_session, user_id)
+        level = sub.level if sub else 'basic'
         await db_ops.create_or_update_subscription(
-            db_session, user_id, is_active=active, next_payment=next_payment
+            db_session,
+            user_id,
+            is_active=active,
+            next_payment=next_payment,
+            level=level,
         )
+
+        stars_info = getattr(update.effective_message, 'stars', None)
+        if stars_info:
+            amount = getattr(stars_info, 'total_amount', None) or getattr(stars_info, 'amount', 0)
+            if isinstance(amount, (int, float)) and amount:
+                await db_ops.add_stars(db_session, user_id, int(amount))
         await db_ops.add_chat_message(
             session=db_session,
             user_id=user_id,
