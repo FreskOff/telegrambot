@@ -10,7 +10,15 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import func
 from telegram import User as TelegramUser
 
-from .models import User, PriceAlert, TrackedCoin, AlertDirection, ChatHistory
+from .models import (
+    User,
+    PriceAlert,
+    TrackedCoin,
+    AlertDirection,
+    ChatHistory,
+    Product,
+    Purchase,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -199,3 +207,25 @@ async def get_chat_history(session: AsyncSession, user_id: int, limit: int = 10)
     """Возвращает последние N сообщений из истории чата пользователя."""
     result = await session.execute(select(ChatHistory).filter(ChatHistory.user_id == user_id).order_by(desc(ChatHistory.timestamp)).limit(limit))
     return list(reversed(result.scalars().all()))
+
+# --- Операции с Магазином ---
+async def list_products(session: AsyncSession):
+    result = await session.execute(select(Product).filter(Product.is_active == True))
+    return result.scalars().all()
+
+async def get_product(session: AsyncSession, product_id: int):
+    result = await session.execute(select(Product).filter(Product.id == product_id))
+    return result.scalar_one_or_none()
+
+async def add_purchase(session: AsyncSession, user_id: int, product_id: int):
+    purchase = Purchase(user_id=user_id, product_id=product_id)
+    session.add(purchase)
+    await session.commit()
+    await session.refresh(purchase)
+    return purchase
+
+async def has_purchased(session: AsyncSession, user_id: int, product_id: int) -> bool:
+    result = await session.execute(
+        select(Purchase).filter(Purchase.user_id == user_id, Purchase.product_id == product_id)
+    )
+    return result.scalar_one_or_none() is not None

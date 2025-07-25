@@ -98,3 +98,26 @@ class LearningProgress(Base):
     
     user = relationship("User", back_populates="learning_progress")
     lesson = relationship("Lesson")
+
+class Product(Base):
+    """Описывает цифровой товар, который можно купить."""
+    __tablename__ = 'products'
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    stars_price = Column(Integer, nullable=False)
+    content_type = Column(String, nullable=False)  # text or file
+    content_value = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+class Purchase(Base):
+    """Фиксирует покупки пользователей."""
+    __tablename__ = 'purchases'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, ForeignKey('users.id'), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey('products.id'), nullable=False, index=True)
+    purchased_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship('User')
+    product = relationship('Product')
+
