@@ -214,3 +214,17 @@ class UsageStats(Base):
 
     user = relationship('User')
 
+
+class NewsArticle(Base):
+    """Новости, связанные с токенами."""
+
+    __tablename__ = 'news_articles'
+
+    id = Column(Integer, primary_key=True, index=True)
+    symbol = Column(String, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    url = Column(String, nullable=False, unique=True)
+    source = Column(String, nullable=True)
+    published_at = Column(DateTime(timezone=True), nullable=True)
+    added_at = Column(DateTime(timezone=True), server_default=func.now())
+
