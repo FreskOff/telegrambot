@@ -9,6 +9,8 @@ from telegram import Update, constants, InlineKeyboardButton, InlineKeyboardMark
 from telegram.ext import CallbackContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from utils.validators import is_valid_id, is_valid_symbol
+
 # --- Импорт всех модулей проекта ---
 from ai.dispatcher import classify_intent, extract_entities
 from database import operations as db_ops
@@ -208,7 +210,7 @@ async def handle_shop(update: Update, context: CallbackContext, payload: str, db
 async def handle_buy_product(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     """Покупает товар по его ID через stars_form."""
     lang = context.user_data.get('lang', 'ru')
-    if not payload.isdigit():
+    if not is_valid_id(payload):
         await update.effective_message.reply_text(get_text(lang, 'purchase_error'))
         return
     product_id = int(payload)
@@ -224,6 +226,8 @@ async def handle_buy_product(update: Update, context: CallbackContext, payload: 
             "payments.sendStarsForm",
             data={"user_id": update.effective_user.id, "amount": product.stars_price, "description": product.name},
         )
+        context.user_data['pending_product_purchase'] = product_id
+        await update.effective_message.reply_text("Open the payment form to complete the purchase")
     except Exception as e:
         logger.error(f"Payment failed for {update.effective_user.id}: {e}")
         await update.effective_message.reply_text(get_text(lang, 'purchase_error'))
@@ -237,28 +241,7 @@ async def handle_buy_product(update: Update, context: CallbackContext, payload: 
             logger.error(f"Refund failed for {update.effective_user.id}: {r_err}")
         return
 
-    await db_ops.add_purchase(db_session, update.effective_user.id, product_id)
-    await update.effective_message.reply_text(
-        get_text(lang, 'purchase_success', product=product.name),
-        parse_mode=constants.ParseMode.MARKDOWN,
-    )
-    try:
-        if product.content_type == "text":
-            await update.effective_message.reply_text(product.content_value)
-        elif product.content_type == "file":
-            with open(product.content_value, "rb") as f:
-                await update.effective_message.reply_document(f)
-    except Exception as e:
-        logger.error(f"Delivery failed for {update.effective_user.id}: {e}")
-        await update.effective_message.reply_text(get_text(lang, 'purchase_error'))
-        try:
-            await context.bot._post(
-                "payments.refund",
-                data={"user_id": update.effective_user.id, "amount": product.stars_price},
-            )
-            await update.effective_message.reply_text(get_text(lang, 'purchase_refund'))
-        except Exception as r_err:
-            logger.error(f"Refund failed for {update.effective_user.id}: {r_err}")
+    # дальнейшая обработка после успешной оплаты происходит в handle_stars_payment
 
 
 async def handle_course_command(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
@@ -371,17 +354,36 @@ async def handle_stars_payment(update: Update, context: CallbackContext, db_sess
                 await context.bot.send_message(user_id, msg, parse_mode=constants.ParseMode.MARKDOWN)
             except Exception as e:
                 logger.error(f'Failed to grant channel access for {user_id}: {e}')
+
+        pending_product = context.user_data.pop('pending_product_purchase', None)
+        if pending_product:
+            product = await db_ops.get_product(db_session, pending_product)
+            if product and not await db_ops.has_purchased(db_session, user_id, pending_product):
+                await db_ops.add_purchase(db_session, user_id, pending_product)
+                await context.bot.send_message(
+                    user_id,
+                    get_text(context.user_data.get('lang', 'ru'), 'purchase_success', product=product.name),
+                    parse_mode=constants.ParseMode.MARKDOWN,
+                )
+                try:
+                    if product.content_type == 'text':
+                        await context.bot.send_message(user_id, product.content_value)
+                    elif product.content_type == 'file':
+                        with open(product.content_value, 'rb') as f:
+                            await context.bot.send_document(user_id, f)
+                except Exception as e:
+                    logger.error(f'Delivery failed for {user_id}: {e}')
     except Exception as e:
         logger.error(f'Failed to update subscription for {user_id}: {e}')
 async def handle_track_coin(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     lang = context.user_data.get('lang', 'ru')
-    if not payload:
+    if not payload or not is_valid_symbol(payload):
         await update.effective_message.reply_text(get_text(lang, 'track_missing_symbol'))
         return
     await handle_portfolio_summary(update, context, f"add {payload}", db_session)
 async def handle_untrack_coin(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     lang = context.user_data.get('lang', 'ru')
-    if not payload:
+    if not payload or not is_valid_symbol(payload):
         await update.effective_message.reply_text(get_text(lang, 'track_missing_symbol'))
         return
     await handle_portfolio_summary(update, context, f"remove {payload}", db_session)
@@ -395,6 +397,9 @@ async def handle_portfolio_summary(update: Update, context: CallbackContext, pay
 
     if action == "add" and len(parts) >= 2:
         symbol = parts[1]
+        if not is_valid_symbol(symbol):
+            await update.effective_message.reply_text(get_text(lang, 'track_missing_symbol'))
+            return
         quantity = float(parts[2]) if len(parts) >= 3 else 0.0
         price = float(parts[3]) if len(parts) >= 4 else 0.0
         buy_date = None
@@ -408,6 +413,9 @@ async def handle_portfolio_summary(update: Update, context: CallbackContext, pay
 
     elif action == "remove" and len(parts) >= 2:
         symbol = parts[1]
+        if not is_valid_symbol(symbol):
+            await update.effective_message.reply_text(get_text(lang, 'track_missing_symbol'))
+            return
         removed = await db_ops.remove_coin_from_portfolio(db_session, user_id, symbol)
         response = get_text(lang, 'coin_removed') if removed else "Монета не найдена в портфеле."
 

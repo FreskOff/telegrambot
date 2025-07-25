@@ -6,6 +6,10 @@ import os
 import logging
 import httpx
 from typing import Optional, Dict, Any, List
+from urllib.parse import urlencode
+import json
+
+from utils.cache import get_cache, set_cache
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
@@ -35,11 +39,18 @@ class CoinGeckoClient:
         Приватный метод для выполнения асинхронных GET-запросов.
         """
         url = f"{self.base_url}{endpoint}"
+        cache_key = f"cg:{endpoint}:{urlencode(sorted(params.items())) if params else ''}"
+        cached = await get_cache(cache_key)
+        if cached:
+            return json.loads(cached)
+
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.get(url, headers=self.headers, params=params)
                 response.raise_for_status()
-                return response.json()
+                data = response.json()
+                await set_cache(cache_key, json.dumps(data), ttl=45)
+                return data
         except Exception as e:
             logger.error(f"Ошибка при запросе к CoinGecko API ({url}): {e}")
             return None
@@ -98,11 +109,18 @@ class CoinMarketCapClient:
 
     async def _request(self, endpoint: str, params: Optional[Dict] = None) -> Optional[Any]:
         url = f"{self.base_url}{endpoint}"
+        cache_key = f"cmc:{endpoint}:{urlencode(sorted(params.items())) if params else ''}"
+        cached = await get_cache(cache_key)
+        if cached:
+            return json.loads(cached)
+
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.get(url, headers=self.headers, params=params)
                 response.raise_for_status()
-                return response.json()
+                data = response.json()
+                await set_cache(cache_key, json.dumps(data), ttl=45)
+                return data
         except Exception as e:
             logger.error(f"Ошибка при запросе к CoinMarketCap API ({url}): {e}")
             return None
@@ -135,11 +153,18 @@ class BinanceClient:
 
     async def _request(self, endpoint: str, params: Optional[Dict] = None) -> Optional[Any]:
         url = f"{self.base_url}{endpoint}"
+        cache_key = f"bin:{endpoint}:{urlencode(sorted(params.items())) if params else ''}"
+        cached = await get_cache(cache_key)
+        if cached:
+            return json.loads(cached)
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(url, params=params)
                 response.raise_for_status()
-                return response.json()
+                data = response.json()
+                await set_cache(cache_key, json.dumps(data), ttl=45)
+                return data
         except Exception as e:
             logger.error(f"Ошибка при запросе к Binance API ({url}): {e}")
             return None
