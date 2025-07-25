@@ -34,8 +34,32 @@ from nft.analytics import handle_nft_analytics
 from depin.projects import handle_depin_projects
 from crypto.news import handle_news_command
 from ai.prediction import handle_predict_command
+from utils.intent_router import IntentRouter
 
 logger = logging.getLogger(__name__)
+router = IntentRouter()
+
+# Регистрация обработчиков намерений
+router.register("GENERAL_CHAT", handle_general_ai_conversation)
+router.register("CRYPTO_INFO", handle_crypto_info_request)
+router.register("TOKEN_ANALYSIS", handle_token_analysis)
+router.register("WHERE_TO_BUY", handle_where_to_buy)
+router.register("PREMARKET_SCAN", handle_premarket_scan)
+router.register("EDU_LESSON", handle_edu_lesson)
+router.register("SETUP_ALERT", handle_setup_alert)
+router.register("MANAGE_ALERTS", handle_manage_alerts)
+router.register("TRACK_COIN", handle_track_coin)
+router.register("UNTRACK_COIN", handle_untrack_coin)
+router.register("PORTFOLIO_SUMMARY", handle_portfolio_summary)
+router.register("BOT_HELP", handle_bot_help)
+router.register("DEFI_FARM", handle_defi_farming)
+router.register("NFT_ANALYTICS", handle_nft_analytics)
+router.register("DEPIN_PROJECTS", handle_depin_projects)
+router.register("CRYPTO_NEWS", handle_news_command)
+router.register("PRICE_PREDICTION", handle_predict_command)
+router.register("SHOP_BUY", handle_buy_product)
+router.register("SUBSCRIPTION", handle_subscribe)
+router.register("COURSE_INFO", handle_course_command)
 # Main menu keyboard
 def build_main_menu(lang: str) -> ReplyKeyboardMarkup:
     buttons = [
@@ -733,25 +757,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
                 payload = context_symbol
                 logger.info(f"Контекст применен. Новый payload: {payload}")
 
-        handlers = {
-            "GENERAL_CHAT": handle_general_ai_conversation,
-            "CRYPTO_INFO": handle_crypto_info_request,
-            "TOKEN_ANALYSIS": handle_token_analysis,
-            "WHERE_TO_BUY": handle_where_to_buy,
-            "PREMARKET_SCAN": handle_premarket_scan,
-            "EDU_LESSON": handle_edu_lesson,
-            "SETUP_ALERT": handle_setup_alert,
-            "MANAGE_ALERTS": handle_manage_alerts,
-            "TRACK_COIN": handle_track_coin,
-            "UNTRACK_COIN": handle_untrack_coin,
-            "PORTFOLIO_SUMMARY": handle_portfolio_summary,
-            "BOT_HELP": handle_bot_help,
-            "DEFI_FARM": handle_defi_farming,
-            "NFT_ANALYTICS": handle_nft_analytics,
-            "DEPIN_PROJECTS": handle_depin_projects,
-        }
-        
-        handler = handlers.get(intent, handle_unsupported_request)
+        handler = router.get(intent) or handle_unsupported_request
         await handler(update, context, payload, db_session)
         duration = int((datetime.utcnow() - start_ts).total_seconds() * 1000)
         await db_ops.update_chat_message(db_session, user_msg.id, duration_ms=duration)
