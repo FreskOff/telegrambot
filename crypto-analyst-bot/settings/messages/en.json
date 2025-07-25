@@ -56,4 +56,12 @@
   ,"subscribe_info": "Subscribe to our premium channel for exclusive reports. Use the button below to pay with stars.",
   "subscribe_button": "Pay subscription"
   ,"subscription_reminder": "Your subscription is inactive. Please renew to keep access."
+  "course_list_header": "\uD83C\uDF93 Available courses:",
+  "course_list_hint": "Details: /course info <id>. Buy: /course buy <id>",
+  "course_free": "free",
+  "course_empty": "No courses found.",
+  "course_not_found": "Course not found.",
+  "course_purchased": "\u2705 Course *{title}* purchased!",
+  "course_already_owned": "You already bought this course.",
+  "course_send_error": "Failed to send course file."
 }

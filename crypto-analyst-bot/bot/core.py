@@ -214,6 +214,72 @@ async def handle_buy_product(update: Update, context: CallbackContext, payload: 
             await update.effective_message.reply_document(f)
 
 
+async def handle_course_command(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
+    """Команды управления курсами."""
+    lang = context.user_data.get('lang', 'ru')
+    parts = payload.split()
+    subcmd = parts[0].lower() if parts else 'list'
+
+    if subcmd == 'list':
+        courses = await db_ops.list_courses(db_session)
+        if not courses:
+            await update.effective_message.reply_text(get_text(lang, 'course_empty'))
+            return
+        lines = [get_text(lang, 'course_list_header')]
+        for c in courses:
+            price = f"{c.stars_price}⭐" if c.stars_price > 0 else get_text(lang, 'course_free')
+            lines.append(f"{c.id}. *{c.title}* — {price}")
+        lines.append(get_text(lang, 'course_list_hint'))
+        await update.effective_message.reply_text('\n'.join(lines), parse_mode=constants.ParseMode.MARKDOWN)
+        return
+
+    if subcmd == 'info' and len(parts) >= 2:
+        course_id = int(parts[1]) if parts[1].isdigit() else None
+        if not course_id:
+            await update.effective_message.reply_text(get_text(lang, 'course_not_found'))
+            return
+        course = await db_ops.get_course(db_session, course_id)
+        if not course:
+            await update.effective_message.reply_text(get_text(lang, 'course_not_found'))
+            return
+        price = f"{course.stars_price}⭐" if course.stars_price > 0 else get_text(lang, 'course_free')
+        text = f"*{course.title}* — {price}\n{course.description}"
+        await update.effective_message.reply_text(text, parse_mode=constants.ParseMode.MARKDOWN)
+        return
+
+    if subcmd == 'buy' and len(parts) >= 2:
+        course_id = int(parts[1]) if parts[1].isdigit() else None
+        if not course_id:
+            await update.effective_message.reply_text(get_text(lang, 'course_not_found'))
+            return
+        course = await db_ops.get_course(db_session, course_id)
+        if not course:
+            await update.effective_message.reply_text(get_text(lang, 'course_not_found'))
+            return
+        if await db_ops.has_purchased_course(db_session, update.effective_user.id, course_id):
+            await update.effective_message.reply_text(get_text(lang, 'course_already_owned'))
+        else:
+            if course.stars_price > 0:
+                await context.bot._post(
+                    'payments.sendStarsForm',
+                    data={"user_id": update.effective_user.id, "amount": course.stars_price, "description": course.title},
+                )
+            await db_ops.add_course_purchase(db_session, update.effective_user.id, course_id)
+            await update.effective_message.reply_text(get_text(lang, 'course_purchased', title=course.title), parse_mode=constants.ParseMode.MARKDOWN)
+
+        if course.content_type == 'text' and course.file_id:
+            await update.effective_message.reply_text(course.file_id)
+        elif course.content_type == 'text':
+            await update.effective_message.reply_text(course.description)
+        elif course.file_id:
+            try:
+                with open(course.file_id, 'rb') as f:
+                    await update.effective_message.reply_document(f)
+            except Exception:
+                await update.effective_message.reply_text(get_text(lang, 'course_send_error'))
+        return
+
+
 async def handle_subscribe(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     """Отправляет ссылку на оплату подписки через звёзды."""
     lang = context.user_data.get('lang', 'ru')
@@ -326,6 +392,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         '/shop': handle_shop,
         '/buy': handle_buy_product,
         '/subscribe': handle_subscribe,
+        '/course': handle_course_command,
     }
     for cmd, func in hardcoded_commands.items():
         if user_input.lower().startswith(cmd):

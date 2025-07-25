@@ -135,3 +135,31 @@ class Subscription(Base):
 
     user = relationship('User')
 
+
+class Course(Base):
+    """Учебный курс, доступный для покупки."""
+
+    __tablename__ = 'courses'
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    stars_price = Column(Integer, nullable=False, default=0)
+    content_type = Column(String, nullable=False)  # text, video, pdf, file
+    file_id = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+
+class CoursePurchase(Base):
+    """Покупка пользователем курса."""
+
+    __tablename__ = 'course_purchases'
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(BigInteger, ForeignKey('users.id'), nullable=False, index=True)
+    course_id = Column(Integer, ForeignKey('courses.id'), nullable=False, index=True)
+    purchased_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship('User')
+    course = relationship('Course')
+

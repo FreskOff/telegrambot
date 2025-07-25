@@ -20,6 +20,8 @@ from .models import (
     Product,
     Purchase,
     Subscription,
+    Course,
+    CoursePurchase,
 )
 
 logger = logging.getLogger(__name__)
@@ -267,3 +269,29 @@ async def get_subscription(session: AsyncSession, user_id: int) -> Optional[Subs
 async def get_active_subscriptions(session: AsyncSession) -> List[Subscription]:
     result = await session.execute(select(Subscription).filter(Subscription.is_active == True))
     return result.scalars().all()
+
+
+# --- Курсы и покупки курсов ---
+async def list_courses(session: AsyncSession):
+    result = await session.execute(select(Course).filter(Course.is_active == True))
+    return result.scalars().all()
+
+
+async def get_course(session: AsyncSession, course_id: int):
+    result = await session.execute(select(Course).filter(Course.id == course_id))
+    return result.scalar_one_or_none()
+
+
+async def add_course_purchase(session: AsyncSession, user_id: int, course_id: int):
+    purchase = CoursePurchase(user_id=user_id, course_id=course_id)
+    session.add(purchase)
+    await session.commit()
+    await session.refresh(purchase)
+    return purchase
+
+
+async def has_purchased_course(session: AsyncSession, user_id: int, course_id: int) -> bool:
+    result = await session.execute(
+        select(CoursePurchase).filter(CoursePurchase.user_id == user_id, CoursePurchase.course_id == course_id)
+    )
+    return result.scalar_one_or_none() is not None
