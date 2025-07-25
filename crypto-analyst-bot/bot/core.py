@@ -4,6 +4,7 @@
 import logging
 import os
 import re
+from datetime import datetime
 from telegram import Update, constants, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -101,6 +102,15 @@ async def handle_premarket_scan(update: Update, context: CallbackContext, payloa
 
     # --- Проверяем подписку пользователя ---
     subscription = await db_ops.get_subscription(db_session, update.effective_user.id)
+    if not subscription or not subscription.is_active:
+        pay_link = os.getenv('SUBSCRIPTION_LINK')
+        reminder = get_text(lang, 'subscription_reminder')
+        if pay_link:
+            kb = InlineKeyboardMarkup([[InlineKeyboardButton(get_text(lang, 'subscribe_button'), url=pay_link)]])
+            await update.effective_message.reply_text(reminder, reply_markup=kb)
+        else:
+            await update.effective_message.reply_text(reminder)
+        return
 
     params = {}
     for part in payload.split():
@@ -299,6 +309,33 @@ async def handle_subscribe(update: Update, context: CallbackContext, payload: st
         parse_mode=constants.ParseMode.MARKDOWN,
         disable_web_page_preview=True,
     )
+
+async def handle_stars_payment(update: Update, context: CallbackContext, db_session: AsyncSession):
+    """Обновляет статус подписки после оплаты звёздами."""
+    user_id = update.effective_user.id
+    try:
+        status = await context.bot._post(
+            'payments.getStarsStatus',
+            data={'user_id': user_id},
+        )
+        active = bool(status.get('active')) if isinstance(status, dict) else False
+        next_ts = status.get('next_payment_date') if isinstance(status, dict) else None
+        next_payment = datetime.fromtimestamp(next_ts) if next_ts else None
+        await db_ops.create_or_update_subscription(
+            db_session, user_id, is_active=active, next_payment=next_payment
+        )
+        channel_id = os.getenv('PRIVATE_CHANNEL_ID')
+        if active and channel_id:
+            try:
+                await context.bot.unban_chat_member(channel_id, user_id)
+                invite = await context.bot.export_chat_invite_link(channel_id)
+                lang = context.user_data.get('lang', 'ru')
+                msg = get_text(lang, 'subscription_access_granted', link=invite)
+                await context.bot.send_message(user_id, msg, parse_mode=constants.ParseMode.MARKDOWN)
+            except Exception as e:
+                logger.error(f'Failed to grant channel access for {user_id}: {e}')
+    except Exception as e:
+        logger.error(f'Failed to update subscription for {user_id}: {e}')
 async def handle_track_coin(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     lang = context.user_data.get('lang', 'ru')
     if not payload:
@@ -372,7 +409,15 @@ async def get_symbol_from_context(session: AsyncSession, user_id: int) -> str | 
 async def handle_update(update: Update, context: CallbackContext, db_session: AsyncSession):
     message = update.effective_message
     user = update.effective_user
-    if not user or not message or not message.text: return
+    if not user or not message:
+        return
+
+    if getattr(message, 'successful_payment', None) or getattr(message, 'stars', None):
+        await handle_stars_payment(update, context, db_session)
+        return
+
+    if not message.text:
+        return
 
     user_input = message.text.strip()
     db_user = await db_ops.get_or_create_user(session=db_session, tg_user=user)

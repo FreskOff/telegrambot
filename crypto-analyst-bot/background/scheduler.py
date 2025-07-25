@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+PRIVATE_CHANNEL_ID = os.getenv("PRIVATE_CHANNEL_ID")
 
 async def check_price_alerts():
     """
@@ -120,14 +121,32 @@ async def check_subscriptions():
                         session, sub.user_id, is_active=active, next_payment=next_payment
                     )
 
-                    if not active:
-                        user = await db_ops.get_user(session, sub.user_id)
-                        lang = user.language if user else "ru"
-                        msg = get_text(lang, "subscription_reminder")
-                        send_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-                        params = {"chat_id": sub.user_id, "text": msg}
-                        async with httpx.AsyncClient() as client:
-                            await client.post(send_url, params=params)
+                    if PRIVATE_CHANNEL_ID:
+                        if active:
+                            try:
+                                await bot.unban_chat_member(PRIVATE_CHANNEL_ID, sub.user_id)
+                                invite = await bot.export_chat_invite_link(PRIVATE_CHANNEL_ID)
+                                user = await db_ops.get_user(session, sub.user_id)
+                                lang = user.language if user else "ru"
+                                msg = get_text(lang, "subscription_access_granted", link=invite)
+                                send_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+                                params = {"chat_id": sub.user_id, "text": msg, "parse_mode": "Markdown"}
+                                async with httpx.AsyncClient() as client:
+                                    await client.post(send_url, params=params)
+                            except Exception as e:
+                                logger.error(f"Error granting channel access for {sub.user_id}: {e}")
+                        else:
+                            try:
+                                await bot.ban_chat_member(PRIVATE_CHANNEL_ID, sub.user_id)
+                            except Exception:
+                                pass
+                            user = await db_ops.get_user(session, sub.user_id)
+                            lang = user.language if user else "ru"
+                            msg = get_text(lang, "subscription_reminder")
+                            send_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+                            params = {"chat_id": sub.user_id, "text": msg}
+                            async with httpx.AsyncClient() as client:
+                                await client.post(send_url, params=params)
                 except Exception as e:
                     logger.error(f"Ошибка проверки подписки для {sub.user_id}: {e}")
         except Exception as e:
@@ -182,7 +201,13 @@ def start_scheduler():
     Добавляет задачу в планировщик и запускает его.
     """
     scheduler.add_job(check_price_alerts, 'interval', seconds=60, id='price_check_job', replace_existing=True)
-    scheduler.add_job(check_subscriptions, 'interval', hours=6, id='subscription_check_job', replace_existing=True)
+    scheduler.add_job(
+        check_subscriptions,
+        'cron',
+        hour=0,
+        id='subscription_check_job',
+        replace_existing=True,
+    )
     scheduler.add_job(
         send_premarket_digest,
         'cron',
