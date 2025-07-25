@@ -108,5 +108,9 @@
   "depin_header": "📡 *Top DePIN projects:*",
   "news_fetching": "⏳ Fetching latest {symbol} news...",
   "news_no_data": "😕 No fresh news for {symbol}.",
-  "news_header": "📰 *Latest {symbol} news:*"
+  "news_header": "📰 *Latest {symbol} news:*",
+  "predict_processing": "⏳ Building forecast for *{symbol}*...",
+  "predict_result": "📈 Forecast for *{symbol}*:\n• 1 day: ${short}\n• 7 days: ${long}",
+  "predict_error": "😕 Failed to build prediction.",
+  "predict_usage": "Usage: /predict BTC"
 }

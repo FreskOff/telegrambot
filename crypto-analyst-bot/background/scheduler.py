@@ -16,6 +16,7 @@ from crypto.handler import COIN_ID_MAP
 from crypto.pre_market import get_premarket_signals
 from datetime import datetime
 from analysis.metrics import gather_metrics
+from ai.prediction import update_prediction_cache
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -256,6 +257,13 @@ def start_scheduler():
         'cron',
         hour=9,
         id='admin_report_job',
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        update_prediction_cache,
+        'cron',
+        hour='*/6',
+        id='prediction_update_job',
         replace_existing=True,
     )
     if not scheduler.running:
