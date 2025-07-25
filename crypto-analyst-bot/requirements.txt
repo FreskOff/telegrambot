@@ -25,3 +25,4 @@ requests
 openai
 matplotlib
 redis>=4.6.0
+duckduckgo-search
