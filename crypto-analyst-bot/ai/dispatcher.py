@@ -89,7 +89,10 @@ EXTRACT_ENTITIES_PROMPT = """
 
 async def classify_intent(user_input: str) -> str:
     """Шаг 1: Определяет только тип намерения."""
-    prompt = CLASSIFY_INTENT_PROMPT.format(user_input=user_input)
+    prompt = CLASSIFY_INTENT_PROMPT.format(
+        user_input=user_input,
+        INTENT_LIST_TEXT=INTENT_LIST_TEXT,
+    )
 
     if GEMINI_API_KEY:
         try:
