@@ -31,7 +31,7 @@ async def _fetch_cryptopanic(symbol: str, limit: int = 5) -> List[Dict]:
     url = "https://cryptopanic.com/api/v1/posts/"
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(url, params=params)
+            resp = await client.get(url, params=params, follow_redirects=True)
             resp.raise_for_status()
             data = resp.json()
     except Exception as e:
@@ -57,7 +57,7 @@ async def _fetch_coindesk(symbol: str, limit: int = 5) -> List[Dict]:
         return json.loads(cached)
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(url)
+            resp = await client.get(url, follow_redirects=True)
             resp.raise_for_status()
             text = resp.text
     except Exception as e:
