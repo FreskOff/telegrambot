@@ -30,6 +30,14 @@ from utils import hash_value
 
 logger = logging.getLogger(__name__)
 
+async def safe_commit(session: AsyncSession):
+    try:
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        logger.error(f"Ошибка при commit(): {e}")
+        raise
+
 # --- Операции с пользователями ---
 async def get_or_create_user(session: AsyncSession, tg_user: TelegramUser) -> User:
     """
@@ -49,7 +57,7 @@ async def get_or_create_user(session: AsyncSession, tg_user: TelegramUser) -> Us
         db_user.last_contact_at = datetime.utcnow()
         updated = True
         if updated:
-            await session.commit()
+            await safe_commit(session)
             await session.refresh(db_user)
         return db_user
     else:
@@ -62,7 +70,7 @@ async def get_or_create_user(session: AsyncSession, tg_user: TelegramUser) -> Us
             last_contact_at=datetime.utcnow(),
         )
         session.add(new_user)
-        await session.commit()
+        await safe_commit(session)
         await session.refresh(new_user)
         return new_user
 
@@ -76,7 +84,7 @@ async def update_user_settings(session: AsyncSession, user_id: int, **kwargs):
     await session.execute(
         sqlalchemy_update(User).where(User.id == user_id).values(**kwargs)
     )
-    await session.commit()
+    await safe_commit(session)
 
 async def get_user_stats(session: AsyncSession, user_id: int) -> dict:
     user = await get_user(session, user_id)
@@ -110,7 +118,7 @@ async def add_stars(session: AsyncSession, user_id: int, amount: int):
         .where(User.id == user_id)
         .values(stars_balance=User.stars_balance + amount)
     )
-    await session.commit()
+    await safe_commit(session)
     await update_usage_stats(session, user_id)
 
 async def increment_request_counter(session: AsyncSession, user_id: int, field: str):
@@ -121,7 +129,7 @@ async def increment_request_counter(session: AsyncSession, user_id: int, field: 
         .where(User.id == user_id)
         .values(**{field: getattr(User, field) + 1, "last_contact_at": datetime.utcnow()})
     )
-    await session.commit()
+    await safe_commit(session)
     await update_usage_stats(session, user_id)
 
 async def deduct_stars(session: AsyncSession, user_id: int, amount: int) -> bool:
@@ -136,7 +144,7 @@ async def deduct_stars(session: AsyncSession, user_id: int, amount: int) -> bool
             stars_spent=User.stars_spent + amount,
         )
     )
-    await session.commit()
+    await safe_commit(session)
     await update_usage_stats(session, user_id)
     return True
 
@@ -167,7 +175,7 @@ async def update_usage_stats(session: AsyncSession, user_id: int):
             favorite_function=fav,
         )
         session.add(stats)
-    await session.commit()
+    await safe_commit(session)
 
 # --- Операции с Алертами ---
 async def add_price_alert(session: AsyncSession, user_id: int, symbol: str, price: float, direction: str) -> PriceAlert:
@@ -175,7 +183,7 @@ async def add_price_alert(session: AsyncSession, user_id: int, symbol: str, pric
     alert_direction = AlertDirection.ABOVE if direction.lower() == 'above' else AlertDirection.BELOW
     new_alert = PriceAlert(user_id=user_id, coin_symbol=symbol.upper(), target_price=price, direction=alert_direction)
     session.add(new_alert)
-    await session.commit()
+    await safe_commit(session)
     await session.refresh(new_alert)
     return new_alert
 
@@ -192,7 +200,7 @@ async def get_all_active_alerts(session: AsyncSession) -> List[PriceAlert]:
 async def deactivate_alert(session: AsyncSession, alert_id: int):
     """Деактивирует алерт после того, как он сработал."""
     await session.execute(sqlalchemy_update(PriceAlert).where(PriceAlert.id == alert_id).values(is_active=False, triggered_at=func.now()))
-    await session.commit()
+    await safe_commit(session)
 
 async def delete_user_alerts_by_symbol(session: AsyncSession, user_id: int, symbol: str) -> int:
     """Удаляет все активные алерты пользователя для указанного символа."""
@@ -202,7 +210,7 @@ async def delete_user_alerts_by_symbol(session: AsyncSession, user_id: int, symb
         PriceAlert.is_active == True
     )
     result = await session.execute(statement)
-    await session.commit()
+    await safe_commit(session)
     return result.rowcount # Возвращает количество удаленных алертов
 
 # --- Операции с Портфолио ---
@@ -232,7 +240,7 @@ async def add_coin_to_portfolio(
             coin.quantity = total_qty
         if buy_date:
             coin.purchase_date = buy_date
-        await session.commit()
+        await safe_commit(session)
         await session.refresh(coin)
         return coin
 
@@ -244,7 +252,7 @@ async def add_coin_to_portfolio(
         purchase_date=buy_date,
     )
     session.add(new_coin)
-    await session.commit()
+    await safe_commit(session)
     await session.refresh(new_coin)
     return new_coin
 
@@ -267,7 +275,7 @@ async def remove_coin_from_portfolio(session: AsyncSession, user_id: int, symbol
     if not coin:
         return False
     await session.delete(coin)
-    await session.commit()
+    await safe_commit(session)
     return True
 
 # --- Операции с Диалогами ---
@@ -284,7 +292,7 @@ async def start_dialog(session: AsyncSession, user_id: int, topic: str | None = 
         return dialog
     dialog = Dialog(user_id=user_id, topic=topic)
     session.add(dialog)
-    await session.commit()
+    await safe_commit(session)
     await session.refresh(dialog)
     return dialog
 
@@ -295,7 +303,7 @@ async def end_dialog(session: AsyncSession, dialog_id: int):
         .where(Dialog.id == dialog_id)
         .values(is_active=False, ended_at=datetime.utcnow())
     )
-    await session.commit()
+    await safe_commit(session)
 
 
 async def update_dialog(session: AsyncSession, dialog_id: int, **kwargs):
@@ -304,7 +312,7 @@ async def update_dialog(session: AsyncSession, dialog_id: int, **kwargs):
     await session.execute(
         sqlalchemy_update(Dialog).where(Dialog.id == dialog_id).values(**kwargs)
     )
-    await session.commit()
+    await safe_commit(session)
 
 
 async def get_top_user_topics(session: AsyncSession, user_id: int, limit: int = 3) -> List[str]:
@@ -360,7 +368,7 @@ async def add_chat_message(
         .where(User.id == user_id)
         .values(last_contact_at=datetime.utcnow())
     )
-    await session.commit()
+    await safe_commit(session)
     await session.refresh(new_message)
     return new_message
 
@@ -370,7 +378,7 @@ async def update_chat_message(session: AsyncSession, message_id: int, **kwargs):
     await session.execute(
         sqlalchemy_update(ChatHistory).where(ChatHistory.id == message_id).values(**kwargs)
     )
-    await session.commit()
+    await safe_commit(session)
 async def get_chat_history(session: AsyncSession, user_id: int, limit: int = 10) -> List[ChatHistory]:
     """Возвращает последние N сообщений из истории чата пользователя."""
     result = await session.execute(select(ChatHistory).filter(ChatHistory.user_id == user_id).order_by(desc(ChatHistory.timestamp)).limit(limit))
@@ -429,7 +437,7 @@ async def create_product(
         is_active=is_active,
     )
     session.add(product)
-    await session.commit()
+    await safe_commit(session)
     await session.refresh(product)
     return product
 
@@ -439,16 +447,16 @@ async def update_product(session: AsyncSession, product_id: int, **kwargs) -> No
     await session.execute(
         sqlalchemy_update(Product).where(Product.id == product_id).values(**kwargs)
     )
-    await session.commit()
+    await safe_commit(session)
 
 async def delete_product(session: AsyncSession, product_id: int) -> None:
     await session.execute(sqlalchemy_delete(Product).where(Product.id == product_id))
-    await session.commit()
+    await safe_commit(session)
 
 async def add_purchase(session: AsyncSession, user_id: int, product_id: int):
     purchase = Purchase(user_id=user_id, product_id=product_id)
     session.add(purchase)
-    await session.commit()
+    await safe_commit(session)
     await session.refresh(purchase)
     await update_usage_stats(session, user_id)
     return purchase
@@ -477,7 +485,7 @@ async def create_or_update_subscription(
     else:
         sub = Subscription(user_id=user_id, is_active=is_active, next_payment=next_payment, level=level)
         session.add(sub)
-    await session.commit()
+    await safe_commit(session)
     await session.refresh(sub)
     await update_usage_stats(session, user_id)
     return sub
@@ -521,7 +529,7 @@ async def create_course(
         is_active=is_active,
     )
     session.add(course)
-    await session.commit()
+    await safe_commit(session)
     await session.refresh(course)
     return course
 
@@ -531,17 +539,17 @@ async def update_course(session: AsyncSession, course_id: int, **kwargs) -> None
     await session.execute(
         sqlalchemy_update(Course).where(Course.id == course_id).values(**kwargs)
     )
-    await session.commit()
+    await safe_commit(session)
 
 async def delete_course(session: AsyncSession, course_id: int) -> None:
     await session.execute(sqlalchemy_delete(Course).where(Course.id == course_id))
-    await session.commit()
+    await safe_commit(session)
 
 
 async def add_course_purchase(session: AsyncSession, user_id: int, course_id: int):
     purchase = CoursePurchase(user_id=user_id, course_id=course_id)
     session.add(purchase)
-    await session.commit()
+    await safe_commit(session)
     await session.refresh(purchase)
     return purchase
 
@@ -642,7 +650,7 @@ async def add_news_articles(session: AsyncSession, symbol: str, articles: List[d
             published_at=art.get("published_at"),
         )
         session.add(article)
-    await session.commit()
+    await safe_commit(session)
 
 
 async def get_recent_news(session: AsyncSession, symbol: str, limit: int = 5) -> List[NewsArticle]:
