@@ -20,6 +20,7 @@ from settings.user import (
     handle_manage_alerts,
     handle_change_language,
     handle_settings_command,
+    MAX_FREE_PORTFOLIO_COINS,
 )
 from settings.messages import get_text
 from ai.general import handle_general_ai_conversation
@@ -441,6 +442,14 @@ async def handle_portfolio_summary(update: Update, context: CallbackContext, pay
         symbol = parts[1]
         if not is_valid_symbol(symbol):
             await update.effective_message.reply_text(get_text(lang, 'track_missing_symbol'))
+            return
+        # Enforce free portfolio limit for non-subscribers
+        portfolio = await db_ops.get_user_portfolio(db_session, user_id)
+        subscription = await db_ops.get_subscription(db_session, user_id)
+        if len(portfolio) >= MAX_FREE_PORTFOLIO_COINS and not (subscription and subscription.is_active):
+            await update.effective_message.reply_text(
+                get_text(lang, 'portfolio_limit', limit=MAX_FREE_PORTFOLIO_COINS)
+            )
             return
         quantity = float(parts[2]) if len(parts) >= 3 else 0.0
         price = float(parts[3]) if len(parts) >= 4 else 0.0
