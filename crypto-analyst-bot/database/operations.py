@@ -2,7 +2,7 @@
 # Функции для выполнения CRUD-операций (Create, Read, Update, Delete) с базой данных.
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Any
 from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -22,7 +22,9 @@ from .models import (
     Subscription,
     Course,
     CoursePurchase,
+    UsageStats,
 )
+from utils import hash_value
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +109,7 @@ async def add_stars(session: AsyncSession, user_id: int, amount: int):
         .values(stars_balance=User.stars_balance + amount)
     )
     await session.commit()
+    await update_usage_stats(session, user_id)
 
 async def increment_request_counter(session: AsyncSession, user_id: int, field: str):
     if field not in ("price_requests", "analysis_requests", "lesson_requests"):
@@ -117,6 +120,7 @@ async def increment_request_counter(session: AsyncSession, user_id: int, field: 
         .values(**{field: getattr(User, field) + 1, "last_contact_at": datetime.utcnow()})
     )
     await session.commit()
+    await update_usage_stats(session, user_id)
 
 async def deduct_stars(session: AsyncSession, user_id: int, amount: int) -> bool:
     balance = await get_star_balance(session, user_id)
@@ -131,7 +135,37 @@ async def deduct_stars(session: AsyncSession, user_id: int, amount: int) -> bool
         )
     )
     await session.commit()
+    await update_usage_stats(session, user_id)
     return True
+
+async def update_usage_stats(session: AsyncSession, user_id: int):
+    """Обновляет агрегированную статистику по пользователю."""
+    user = await get_user(session, user_id)
+    if not user:
+        return
+    fav = max(
+        (
+            ("price", user.price_requests),
+            ("analysis", user.analysis_requests),
+            ("lesson", user.lesson_requests),
+        ),
+        key=lambda x: x[1],
+    )[0]
+    result = await session.execute(select(UsageStats).filter(UsageStats.user_id == user_id))
+    stats = result.scalar_one_or_none()
+    if stats:
+        stats.last_activity = user.last_contact_at
+        stats.stars_spent = user.stars_spent
+        stats.favorite_function = fav
+    else:
+        stats = UsageStats(
+            user_id=user_id,
+            last_activity=user.last_contact_at,
+            stars_spent=user.stars_spent,
+            favorite_function=fav,
+        )
+        session.add(stats)
+    await session.commit()
 
 # --- Операции с Алертами ---
 async def add_price_alert(session: AsyncSession, user_id: int, symbol: str, price: float, direction: str) -> PriceAlert:
@@ -235,9 +269,37 @@ async def remove_coin_from_portfolio(session: AsyncSession, user_id: int, symbol
     return True
 
 # --- Операции с Историей Чата ---
-async def add_chat_message(session: AsyncSession, user_id: int, role: str, text: str) -> ChatHistory:
+async def add_chat_message(
+    session: AsyncSession,
+    user_id: int,
+    role: str,
+    text: str,
+    *,
+    request_type: Optional[str] = None,
+    entities: Optional[Any] = None,
+    duration_ms: Optional[int] = None,
+    error: bool = False,
+    event: Optional[str] = None,
+) -> ChatHistory:
     """Добавляет новое сообщение в историю чата пользователя."""
-    new_message = ChatHistory(user_id=user_id, role=role, message_text=text)
+    user = await get_user(session, user_id)
+    new_message = ChatHistory(
+        user_id=user_id,
+        role=role,
+        message_text=text,
+        username_hash=hash_value(user.username) if user else None,
+        first_name_hash=hash_value(user.first_name) if user else None,
+        language=user.language if user else "ru",
+        timezone=user.timezone if user else "UTC",
+        currency=user.currency if user else "USD",
+        request_type=request_type,
+        entities=(
+            entities if isinstance(entities, str) else None if entities is None else str(entities)
+        ),
+        duration_ms=duration_ms,
+        error=error,
+        event=event,
+    )
     session.add(new_message)
     await session.execute(
         sqlalchemy_update(User)
@@ -247,6 +309,14 @@ async def add_chat_message(session: AsyncSession, user_id: int, role: str, text:
     await session.commit()
     await session.refresh(new_message)
     return new_message
+
+async def update_chat_message(session: AsyncSession, message_id: int, **kwargs):
+    if not kwargs:
+        return
+    await session.execute(
+        sqlalchemy_update(ChatHistory).where(ChatHistory.id == message_id).values(**kwargs)
+    )
+    await session.commit()
 async def get_chat_history(session: AsyncSession, user_id: int, limit: int = 10) -> List[ChatHistory]:
     """Возвращает последние N сообщений из истории чата пользователя."""
     result = await session.execute(select(ChatHistory).filter(ChatHistory.user_id == user_id).order_by(desc(ChatHistory.timestamp)).limit(limit))
@@ -266,6 +336,7 @@ async def add_purchase(session: AsyncSession, user_id: int, product_id: int):
     session.add(purchase)
     await session.commit()
     await session.refresh(purchase)
+    await update_usage_stats(session, user_id)
     return purchase
 
 async def has_purchased(session: AsyncSession, user_id: int, product_id: int) -> bool:
@@ -292,6 +363,7 @@ async def create_or_update_subscription(
         session.add(sub)
     await session.commit()
     await session.refresh(sub)
+    await update_usage_stats(session, user_id)
     return sub
 
 
