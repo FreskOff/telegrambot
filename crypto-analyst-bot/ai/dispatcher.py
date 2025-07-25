@@ -19,7 +19,7 @@ GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemin
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-OPENAI_MODEL = os.getenv("OPENAI_GPT_MODEL", "gpt-4o")
+OPENAI_MODEL = os.getenv("OPENAI_GPT_MODEL", "gpt-4o-mini")
 
 # --- Загрузка конфигурации намерений ---
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))

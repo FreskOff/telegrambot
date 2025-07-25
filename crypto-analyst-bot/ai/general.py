@@ -21,7 +21,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-OPENAI_MODEL = os.getenv("OPENAI_GPT_MODEL", "gpt-4o")
+OPENAI_MODEL = os.getenv("OPENAI_GPT_MODEL", "gpt-4o-mini")
 
 
 # --- НОВЫЙ ПРОМПТ С ФОКУСОМ НА ЭМПАТИИ ---

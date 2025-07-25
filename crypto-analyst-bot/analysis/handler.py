@@ -28,7 +28,7 @@ GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemin
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-GPT4_MODEL = os.getenv("OPENAI_GPT_MODEL", "gpt-4o")
+GPT4_MODEL = os.getenv("OPENAI_GPT_MODEL", "gpt-4o-mini")
 
 # кэш ответов {payload: (timestamp, message)}
 analysis_cache: dict[str, tuple[float, str]] = {}
