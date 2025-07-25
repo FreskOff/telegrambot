@@ -191,7 +191,12 @@ async def handle_shop(update: Update, context: CallbackContext, payload: str, db
         return
     lines = [get_text(lang, 'shop_header')]
     for p in products:
-        lines.append(f"{p.id}. *{p.name}* — {p.stars_price}⭐")
+        short_desc = p.description.splitlines()[0]
+        if len(short_desc) > 80:
+            short_desc = short_desc[:77] + '...'
+        info = f"{p.id}. *{p.name}* — {p.stars_price}⭐"
+        extra = f"({p.item_type}, {p.rating}⭐)"
+        lines.append(f"{info} {extra}\n_{short_desc}_")
     lines.append(get_text(lang, 'shop_hint'))
     await update.effective_message.reply_text(
         "\n".join(lines), parse_mode=constants.ParseMode.MARKDOWN
@@ -208,20 +213,49 @@ async def handle_buy_product(update: Update, context: CallbackContext, payload: 
     if not product:
         await update.effective_message.reply_text(get_text(lang, 'purchase_error'))
         return
-    await context.bot._post(
-        "payments.sendStarsForm",
-        data={"user_id": update.effective_user.id, "amount": product.stars_price, "description": product.name},
-    )
+    if await db_ops.has_purchased(db_session, update.effective_user.id, product_id):
+        await update.effective_message.reply_text(get_text(lang, 'product_already_owned'))
+        return
+    try:
+        await context.bot._post(
+            "payments.sendStarsForm",
+            data={"user_id": update.effective_user.id, "amount": product.stars_price, "description": product.name},
+        )
+    except Exception as e:
+        logger.error(f"Payment failed for {update.effective_user.id}: {e}")
+        await update.effective_message.reply_text(get_text(lang, 'purchase_error'))
+        try:
+            await context.bot._post(
+                "payments.refund",
+                data={"user_id": update.effective_user.id, "amount": product.stars_price},
+            )
+            await update.effective_message.reply_text(get_text(lang, 'purchase_refund'))
+        except Exception as r_err:
+            logger.error(f"Refund failed for {update.effective_user.id}: {r_err}")
+        return
+
     await db_ops.add_purchase(db_session, update.effective_user.id, product_id)
     await update.effective_message.reply_text(
         get_text(lang, 'purchase_success', product=product.name),
         parse_mode=constants.ParseMode.MARKDOWN,
     )
-    if product.content_type == "text":
-        await update.effective_message.reply_text(product.content_value)
-    elif product.content_type == "file":
-        with open(product.content_value, "rb") as f:
-            await update.effective_message.reply_document(f)
+    try:
+        if product.content_type == "text":
+            await update.effective_message.reply_text(product.content_value)
+        elif product.content_type == "file":
+            with open(product.content_value, "rb") as f:
+                await update.effective_message.reply_document(f)
+    except Exception as e:
+        logger.error(f"Delivery failed for {update.effective_user.id}: {e}")
+        await update.effective_message.reply_text(get_text(lang, 'purchase_error'))
+        try:
+            await context.bot._post(
+                "payments.refund",
+                data={"user_id": update.effective_user.id, "amount": product.stars_price},
+            )
+            await update.effective_message.reply_text(get_text(lang, 'purchase_refund'))
+        except Exception as r_err:
+            logger.error(f"Refund failed for {update.effective_user.id}: {r_err}")
 
 
 async def handle_course_command(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):

@@ -105,6 +105,8 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=False)
+    rating = Column(Integer, nullable=False, default=0, comment="Рейтинг товара в звёздах")
+    item_type = Column(String, nullable=False, default='report', comment="Тип товара: отчёт, сигнал, курс")
     stars_price = Column(Integer, nullable=False)
     content_type = Column(String, nullable=False)  # text or file
     content_value = Column(String, nullable=False)

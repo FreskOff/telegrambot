@@ -64,5 +64,7 @@
   "course_not_found": "Course not found.",
   "course_purchased": "\u2705 Course *{title}* purchased!",
   "course_already_owned": "You already bought this course.",
-  "course_send_error": "Failed to send course file."
+  "course_send_error": "Failed to send course file.",
+  "product_already_owned": "You already bought this product.",
+  "purchase_refund": "Purchase cancelled and stars refunded"
 }
