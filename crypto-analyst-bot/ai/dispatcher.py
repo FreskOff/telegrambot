@@ -3,10 +3,11 @@
 # с использованием строгих, основанных на правилах, промптов.
 
 import os
+import json
 import logging
 import httpx
 from dotenv import load_dotenv
-from typing import Dict
+from typing import Dict, Tuple
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -20,28 +21,31 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 OPENAI_MODEL = os.getenv("OPENAI_GPT_MODEL", "gpt-4o")
 
+# --- Загрузка конфигурации намерений ---
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+INTENTS_FILE = os.path.join(BASE_DIR, "config", "intents.json")
+try:
+    with open(INTENTS_FILE, "r", encoding="utf-8") as f:
+        INTENT_DESCRIPTIONS: Dict[str, str] = json.load(f)
+except Exception as e:  # pragma: no cover - fallback only on error
+    logger.error(f"Не удалось загрузить {INTENTS_FILE}: {e}")
+    INTENT_DESCRIPTIONS = {
+        "GENERAL_CHAT": "Общий разговор.",
+        "CRYPTO_INFO": "Запрос цены.",
+        "UNSUPPORTED_INTENT": "Неизвестная категория.",
+    }
+
+INTENT_LIST_TEXT = "\n".join(
+    f"- {name}: {desc}" for name, desc in INTENT_DESCRIPTIONS.items()
+)
+
 
 # --- ПРОМПТ 1: Строгая классификация намерения ---
 CLASSIFY_INTENT_PROMPT = """
 Ты — системный мозг крипто-бота. Твоя задача — проанализировать запрос пользователя и определить его основное намерение. Твой ответ должен быть ТОЛЬКО ОДНИМ словом из предоставленного списка. Не добавляй ничего лишнего.
 
 **Список Допустимых Намерений:**
-- GENERAL_CHAT: Общий разговор, эмоции, приветствия, благодарности, вопросы о тебе.
-- CRYPTO_INFO: Прямой запрос цены, курса, стоимости криптовалюты.
-- TOKEN_ANALYSIS: Глубокий анализ, новости, описание токена.
-- WHERE_TO_BUY: Вопрос, где можно купить криптовалюту.
-- PREMARKET_SCAN: Вопросы о новых токенах, ICO, предстоящих листингах.
-- EDU_LESSON: Запрос на объяснение крипто-терминов и концепций.
-- SETUP_ALERT: Команда на установку ценового оповещения.
-- MANAGE_ALERTS: Команда на управление существующими оповещениями.
-- PORTFOLIO_SUMMARY: Запрос на показ портфеля.
-- TRACK_COIN: Команда на добавление монеты в портфель.
-- UNTRACK_COIN: Команда на удаление монеты из портфеля.
-- BOT_HELP: Прямой запрос помощи.
-- DEFI_FARM: Запрос доходных ферм.
-- NFT_ANALYTICS: Запрос аналитики по NFT коллекциям.
-- DEPIN_PROJECTS: Запрос проектов из категории DePIN.
-- UNSUPPORTED_INTENT: Все, что не подходит под другие категории.
+{INTENT_LIST_TEXT}
 
 **Запрос пользователя:** "{user_input}"
 
@@ -73,6 +77,11 @@ EXTRACT_ENTITIES_PROMPT = """
 - **DEFI_FARM:** Просто верни `payload:` (нет дополнительных параметров).
 - **NFT_ANALYTICS:** Извлеки слаг коллекции в ключ `slug`. (Например, "nft bored ape" -> `slug:bored-ape-yacht-club`)
 - **DEPIN_PROJECTS:** Просто верни `payload:`.
+- **CRYPTO_NEWS:** Извлеки символ токена в ключ `symbol`.
+- **PRICE_PREDICTION:** Извлеки символ токена в ключ `symbol`.
+- **SHOP_BUY:** Извлеки идентификатор товара в ключ `product_id`.
+- **SUBSCRIPTION:** Просто верни `payload:`.
+- **COURSE_INFO:** Извлеки идентификатор курса в ключ `course_id`.
 - **Для всех остальных намерений:** Просто верни `payload:`, если нет очевидных данных для извлечения.
 
 **Твой ответ (в формате `ключ:значение`):**
