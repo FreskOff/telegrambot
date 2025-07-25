@@ -94,5 +94,14 @@
   "top_topics_hint": "You often ask about: {topics}",
   "full_report_btn": "Full report for 100⭐",
   "subscription_basic": "Basic subscription activated.",
-  "subscription_premium": "Premium subscription activated."
+  "subscription_premium": "Premium subscription activated.",
+  "defi_searching": "⏳ Looking for top DeFi farms...",
+  "defi_no_data": "😕 Failed to get farming data.",
+  "defi_header": "🌾 *Top DeFi Farms:*",
+  "nft_searching": "⏳ Analyzing *{slug}* collection...",
+  "nft_no_data": "😕 Failed to get NFT data.",
+  "nft_header": "🖼 *Stats for {slug}:*",
+  "depin_searching": "⏳ Scanning DePIN projects...",
+  "depin_no_data": "😕 Failed to get DePIN project data.",
+  "depin_header": "📡 *Top DePIN projects:*"
 }
