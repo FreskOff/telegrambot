@@ -563,6 +563,7 @@ async def handle_portfolio_summary(update: Update, context: CallbackContext, pay
         return
 
     user_id = update.effective_user.id
+    lang = context.user_data.get('lang', 'ru')
     parts = payload.split()
     action = parts[0].lower() if parts else "list"
 
