@@ -7,6 +7,7 @@ from telegram.ext import CallbackContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from utils.api_clients import coingecko_client
+from utils.validators import is_valid_symbol
 from ai.formatter import format_data_with_ai
 from database import operations as db_ops
 from settings.messages import get_text
@@ -28,6 +29,9 @@ async def get_coin_ids_from_symbols(symbols: list[str]) -> tuple[list[str], list
     found_ids = []
     not_found_symbols = []
     for symbol in symbols:
+        if not is_valid_symbol(symbol):
+            not_found_symbols.append(symbol)
+            continue
         upper_symbol = symbol.strip().upper()
         # 1. Ищем в нашем кэше
         coin_id = COIN_ID_MAP.get(upper_symbol)

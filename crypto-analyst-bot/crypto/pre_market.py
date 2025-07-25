@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import httpx
 from bs4 import BeautifulSoup
 from utils.api_clients import coingecko_client
+from utils.cache import get_cache, set_cache
 
 logger = logging.getLogger(__name__)
 load_dotenv()
@@ -22,6 +23,11 @@ CRYPTORANK_API_KEY = os.getenv("CRYPTORANK_API_KEY")
 
 async def fetch_coinmarketcal_events(limit: int = 5) -> List[Dict]:
     """Получает события из CoinMarketCal."""
+    cache_key = f"cmcal:{limit}"
+    cached = await get_cache(cache_key)
+    if cached:
+        return json.loads(cached)
+
     url = f"{COINMARKETCAL_BASE_URL}/events"
     headers = {"Accept": "application/json"}
     if COINMARKETCAL_API_KEY:
@@ -46,6 +52,7 @@ async def fetch_coinmarketcal_events(limit: int = 5) -> List[Dict]:
                     "event_date": item.get("date_event"),
                     "source_url": item.get("source"),
                 })
+            await set_cache(cache_key, json.dumps(events), ttl=45)
             return events
     except Exception as e:
         logger.error(f"Ошибка при запросе к CoinMarketCal: {e}")
@@ -53,6 +60,11 @@ async def fetch_coinmarketcal_events(limit: int = 5) -> List[Dict]:
 
 async def fetch_icodrops_upcoming(limit: int = 5) -> List[Dict]:
     """Парсит сайт ICO Drops для получения списка предстоящих ICO."""
+    cache_key = f"icodrops:{limit}"
+    cached = await get_cache(cache_key)
+    if cached:
+        return json.loads(cached)
+
     url = "https://icodrops.com/category/upcoming-ico/"
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -73,6 +85,7 @@ async def fetch_icodrops_upcoming(limit: int = 5) -> List[Dict]:
                     "event_date": None,
                     "source_url": url,
                 })
+            await set_cache(cache_key, json.dumps(icos), ttl=45)
             return icos
     except Exception as e:
         logger.error(f"Ошибка при парсинге ICO Drops: {e}")
@@ -81,6 +94,11 @@ async def fetch_icodrops_upcoming(limit: int = 5) -> List[Dict]:
 
 async def fetch_coingecko_events(limit: int = 5) -> List[Dict]:
     """Получает список событий из CoinGecko Events API."""
+    cache_key = f"cg_events:{limit}"
+    cached = await get_cache(cache_key)
+    if cached:
+        return json.loads(cached)
+
     params = {
         "upcoming_events_only": "true",
         "page": 1,
@@ -104,6 +122,7 @@ async def fetch_coingecko_events(limit: int = 5) -> List[Dict]:
                     "importance": "high" if item.get("sponsored") else None,
                     "source_url": item.get("website"),
                 })
+            await set_cache(cache_key, json.dumps(events), ttl=45)
             return events
     except Exception as e:
         logger.error(f"Ошибка при запросе к CoinGecko Events: {e}")
@@ -112,6 +131,11 @@ async def fetch_coingecko_events(limit: int = 5) -> List[Dict]:
 
 async def fetch_cryptorank_events(limit: int = 5) -> List[Dict]:
     """Получает события из CryptoRank."""
+    cache_key = f"crank:{limit}"
+    cached = await get_cache(cache_key)
+    if cached:
+        return json.loads(cached)
+
     headers = {}
     if CRYPTORANK_API_KEY:
         headers["API-KEY"] = CRYPTORANK_API_KEY
@@ -134,6 +158,7 @@ async def fetch_cryptorank_events(limit: int = 5) -> List[Dict]:
                     "importance": item.get("importance"),
                     "source_url": item.get("url"),
                 })
+            await set_cache(cache_key, json.dumps(events), ttl=45)
             return events
     except Exception as e:
         logger.error(f"Ошибка при запросе к CryptoRank: {e}")
