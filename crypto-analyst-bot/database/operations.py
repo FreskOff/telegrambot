@@ -42,6 +42,7 @@ async def get_or_create_user(session: AsyncSession, tg_user: TelegramUser) -> Us
             db_user.last_name = tg_user.last_name
             updated = True
         db_user.last_activity_at = datetime.utcnow()
+        db_user.last_contact_at = datetime.utcnow()
         updated = True
         if updated:
             await session.commit()
@@ -54,6 +55,7 @@ async def get_or_create_user(session: AsyncSession, tg_user: TelegramUser) -> Us
             first_name=tg_user.first_name,
             last_name=tg_user.last_name,
             last_activity_at=datetime.utcnow(),
+            last_contact_at=datetime.utcnow(),
         )
         session.add(new_user)
         await session.commit()
@@ -83,6 +85,11 @@ async def get_user_stats(session: AsyncSession, user_id: int) -> dict:
         "timezone": user.timezone if user else "UTC",
         "currency": user.currency if user else "USD",
         "message_count": count,
+        "price_requests": user.price_requests if user else 0,
+        "analysis_requests": user.analysis_requests if user else 0,
+        "lesson_requests": user.lesson_requests if user else 0,
+        "stars_spent": user.stars_spent if user else 0,
+        "last_contact": user.last_contact_at.isoformat() if user and user.last_contact_at else None,
     }
 
 # --- Работа со звёздами ---
@@ -101,11 +108,29 @@ async def add_stars(session: AsyncSession, user_id: int, amount: int):
     )
     await session.commit()
 
+async def increment_request_counter(session: AsyncSession, user_id: int, field: str):
+    if field not in ("price_requests", "analysis_requests", "lesson_requests"):
+        return
+    await session.execute(
+        sqlalchemy_update(User)
+        .where(User.id == user_id)
+        .values(**{field: getattr(User, field) + 1, "last_contact_at": datetime.utcnow()})
+    )
+    await session.commit()
+
 async def deduct_stars(session: AsyncSession, user_id: int, amount: int) -> bool:
     balance = await get_star_balance(session, user_id)
     if balance < amount:
         return False
-    await add_stars(session, user_id, -amount)
+    await session.execute(
+        sqlalchemy_update(User)
+        .where(User.id == user_id)
+        .values(
+            stars_balance=User.stars_balance - amount,
+            stars_spent=User.stars_spent + amount,
+        )
+    )
+    await session.commit()
     return True
 
 # --- Операции с Алертами ---
@@ -214,6 +239,11 @@ async def add_chat_message(session: AsyncSession, user_id: int, role: str, text:
     """Добавляет новое сообщение в историю чата пользователя."""
     new_message = ChatHistory(user_id=user_id, role=role, message_text=text)
     session.add(new_message)
+    await session.execute(
+        sqlalchemy_update(User)
+        .where(User.id == user_id)
+        .values(last_contact_at=datetime.utcnow())
+    )
     await session.commit()
     await session.refresh(new_message)
     return new_message

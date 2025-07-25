@@ -51,8 +51,9 @@ async def handle_crypto_info_request(update: Update, context: CallbackContext, p
     Обрабатывает запрос на получение информации о криптовалюте.
     """
     if not update.effective_message: return
-    
+
     user_id = update.effective_user.id
+    await db_ops.increment_request_counter(db_session, user_id, "price_requests")
     lang = context.user_data.get('lang', 'ru')
     symbols = payload.split(',')
     coin_ids, not_found = await get_coin_ids_from_symbols(symbols)

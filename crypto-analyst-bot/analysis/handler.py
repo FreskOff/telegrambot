@@ -157,6 +157,7 @@ async def handle_token_analysis(update: Update, context: CallbackContext, payloa
     if not update.effective_message:
         return
     user_id = update.effective_user.id
+    await db_ops.increment_request_counter(db_session, user_id, "analysis_requests")
     lang = context.user_data.get('lang', 'ru')
 
     if not payload:
