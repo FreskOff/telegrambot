@@ -3,6 +3,7 @@
 
 import logging
 import re
+import os
 from telegram import Update, constants
 from telegram.ext import CallbackContext
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,10 +21,12 @@ from settings.user import (
 from settings.messages import get_text
 from ai.general import handle_general_ai_conversation
 from analysis.handler import handle_token_analysis
+from admin.handler import handle_admin_request
 from crypto.pre_market import get_premarket_signals
 from utils.api_clients import coinmarketcap_client, binance_client
 
 logger = logging.getLogger(__name__)
+ADMIN_ID = int(os.getenv("ADMIN_TELEGRAM_ID", "0"))
 
 # --- Обработчики и заглушки ---
 async def handle_unsupported_request(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
@@ -227,6 +230,8 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
     db_user = await db_ops.get_or_create_user(session=db_session, tg_user=user)
     logger.info(f"Обработка сообщения от {db_user.id}: '{user_input}'")
     context.user_data['lang'] = db_user.language
+    is_admin = user.id == ADMIN_ID
+    context.user_data['is_admin'] = is_admin
     
     await db_ops.add_chat_message(session=db_session, user_id=user.id, role='user', text=user_input)
 
@@ -250,11 +255,11 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         await context.bot.send_chat_action(chat_id=message.chat_id, action=constants.ChatAction.TYPING)
         
         # Шаг 1: Классификация
-        intent = await classify_intent(user_input)
+        intent = await classify_intent(user_input, is_admin=is_admin)
         logger.info(f"Шаг 1: Намерение определено как '{intent}'")
 
         # Шаг 2: Извлечение данных
-        entities = await extract_entities(intent, user_input)
+        entities = await extract_entities(intent, user_input, is_admin=is_admin)
         logger.info(f"Шаг 2: Извлечены данные: {entities}")
 
         payload = next(iter(entities.values()))
@@ -281,9 +286,13 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
             "UNTRACK_COIN": handle_untrack_coin,
             "PORTFOLIO_SUMMARY": handle_portfolio_summary,
             "BOT_HELP": handle_bot_help,
+            "ADMIN_ACTION": handle_admin_request,
         }
         
-        handler = handlers.get(intent, handle_unsupported_request)
+        if intent == "ADMIN_ACTION" and not is_admin:
+            handler = handle_unsupported_request
+        else:
+            handler = handlers.get(intent, handle_unsupported_request)
         await handler(update, context, payload, db_session)
 
     except Exception as e:

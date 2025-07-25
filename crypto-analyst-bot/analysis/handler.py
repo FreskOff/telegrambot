@@ -6,6 +6,8 @@ import json
 import os
 import httpx
 import time
+from fpdf import FPDF
+import matplotlib.pyplot as plt
 from dotenv import load_dotenv
 from telegram import Update, constants
 from telegram.ext import CallbackContext
@@ -27,6 +29,21 @@ GPT4_MODEL = os.getenv("OPENAI_GPT_MODEL", "gpt-4o")
 # кэш ответов {payload: (timestamp, message)}
 analysis_cache: dict[str, tuple[float, str]] = {}
 CACHE_TTL = 600  # seconds
+
+EXTENDED_REPORT_PRICE = 100  # stars
+
+EXTENDED_ANALYSIS_PROMPT = """
+Ты эксперт по ончейн‑анализу. Сформируй подробный отчёт с историческими данными,
+графиками и краткими метриками по запросу пользователя.
+Ответ на русском в Markdown.
+
+Запрос: "{user_query}"
+Данные поиска:
+```json
+{search_results}
+```
+Полный отчёт:
+"""
 
 
 ANALYSIS_PROMPT = """
@@ -71,6 +88,27 @@ async def _generate_summary(prompt: str) -> str:
             data = response.json()
             return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
+
+def _markdown_to_pdf_bytes(text: str) -> bytes:
+    """Генерирует простой PDF из Markdown-текста."""
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    for line in text.split("\n"):
+        pdf.multi_cell(0, 10, line)
+    return pdf.output(dest="S").encode("latin-1")
+
+
+async def generate_extended_report(user_query: str, search_results: list) -> tuple[str, bytes]:
+    """Формирует расширенный отчёт и PDF (заготовка)."""
+    prompt = EXTENDED_ANALYSIS_PROMPT.format(
+        user_query=user_query,
+        search_results=json.dumps(search_results, indent=2, ensure_ascii=False),
+    )
+    analysis_md = await _generate_summary(prompt)
+    pdf_bytes = _markdown_to_pdf_bytes(analysis_md)
+    return analysis_md, pdf_bytes
+
 async def handle_token_analysis(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     if not update.effective_message:
         return
@@ -82,7 +120,12 @@ async def handle_token_analysis(update: Update, context: CallbackContext, payloa
         await update.effective_message.reply_text(get_text(lang, 'analysis_missing_token'))
         return
 
-    cache_key = payload.lower().strip()
+    extended = False
+    if payload.lower().endswith('::full'):
+        extended = True
+        payload = payload[:-6]
+
+    cache_key = (payload.lower().strip() + (':full' if extended else ''))
     cached = analysis_cache.get(cache_key)
     if cached and time.time() - cached[0] < CACHE_TTL:
         final_message = cached[1]
@@ -104,19 +147,29 @@ async def handle_token_analysis(update: Update, context: CallbackContext, payloa
             return
 
         search_results = search_results_list[0].results
-        prompt = ANALYSIS_PROMPT.format(
-            user_query=payload,
-            search_results=json.dumps(search_results, indent=2, ensure_ascii=False),
-        )
+        if extended:
+            user_stars = await db_ops.get_user_stars(db_session, user_id)
+            if user_stars < EXTENDED_REPORT_PRICE:
+                await update.effective_message.reply_text(get_text(lang, 'analysis_full_insufficient_stars'))
+                return
+            await db_ops.deduct_stars(db_session, user_id, EXTENDED_REPORT_PRICE)
+            await update.effective_message.reply_text(get_text(lang, 'analysis_full_ready'))
+            md_text, pdf_bytes = await generate_extended_report(payload, search_results)
+            await update.effective_message.reply_document(document=pdf_bytes, filename=f"{payload}_report.pdf")
+            final_message = md_text
+        else:
+            prompt = ANALYSIS_PROMPT.format(
+                user_query=payload,
+                search_results=json.dumps(search_results, indent=2, ensure_ascii=False),
+            )
+            analysis_text = await _generate_summary(prompt)
+            final_message = get_text(lang, 'analysis_header', payload=payload, analysis=analysis_text)
+            await update.effective_message.reply_text(
+                final_message,
+                parse_mode=constants.ParseMode.MARKDOWN,
+                disable_web_page_preview=True,
+            )
 
-        analysis_text = await _generate_summary(prompt)
-
-        final_message = get_text(lang, 'analysis_header', payload=payload, analysis=analysis_text)
-        await update.effective_message.reply_text(
-            final_message,
-            parse_mode=constants.ParseMode.MARKDOWN,
-            disable_web_page_preview=True,
-        )
         await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=final_message)
         analysis_cache[cache_key] = (time.time(), final_message)
 

@@ -46,6 +46,30 @@ async def get_user(session: AsyncSession, user_id: int) -> Optional[User]:
     result = await session.execute(select(User).filter(User.id == user_id))
     return result.scalar_one_or_none()
 
+async def add_stars(session: AsyncSession, user_id: int, amount: int):
+    """Добавляет пользователю указанное количество звёзд."""
+    await session.execute(
+        sqlalchemy_update(User).where(User.id == user_id).values(stars=User.stars + amount)
+    )
+    await session.commit()
+
+async def deduct_stars(session: AsyncSession, user_id: int, amount: int) -> bool:
+    """Списывает звёзды, если их достаточно. Возвращает успех операции."""
+    user = await get_user(session, user_id)
+    if not user or user.stars < amount:
+        return False
+    user.stars -= amount
+    await session.commit()
+    return True
+
+async def get_user_stars(session: AsyncSession, user_id: int) -> int:
+    user = await get_user(session, user_id)
+    return user.stars if user else 0
+
+async def count_users(session: AsyncSession) -> int:
+    result = await session.execute(select(func.count()).select_from(User))
+    return result.scalar_one() or 0
+
 async def update_user_settings(session: AsyncSession, user_id: int, **kwargs):
     if not kwargs:
         return

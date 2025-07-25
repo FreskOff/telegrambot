@@ -23,6 +23,7 @@ class User(Base):
     language = Column(String, nullable=False, default="ru")
     timezone = Column(String, nullable=False, default="UTC")
     currency = Column(String, nullable=False, default="USD")
+    stars = Column(Integer, nullable=False, default=0, comment="Баланс звёзд")
     
     alerts = relationship("PriceAlert", back_populates="user", cascade="all, delete-orphan")
     tracked_coins = relationship("TrackedCoin", back_populates="user", cascade="all, delete-orphan")

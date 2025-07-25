@@ -34,6 +34,7 @@ CLASSIFY_INTENT_PROMPT = """
 - TRACK_COIN: Команда на добавление монеты в портфель.
 - UNTRACK_COIN: Команда на удаление монеты из портфеля.
 - BOT_HELP: Прямой запрос помощи.
+- ADMIN_ACTION: Запросы на управление ботом (только для администратора).
 - UNSUPPORTED_INTENT: Все, что не подходит под другие категории.
 
 **Запрос пользователя:** "{user_input}"
@@ -63,15 +64,19 @@ EXTRACT_ENTITIES_PROMPT = """
 - **TRACK_COIN:** Извлеки символ токена в ключ `symbol`. (Например, "добавь рипл" -> `symbol:XRP`)
 - **UNTRACK_COIN:** Извлеки символ токена в ключ `symbol`. (Например, "удали кардано" -> `symbol:ADA`)
 - **WHERE_TO_BUY:** Извлеки символ токена в ключ `symbol`. (Например, "где купить догикоин" -> `symbol:DOGE`)
+- **ADMIN_ACTION:** Извлеки текст команды в ключ `command`.
 - **Для всех остальных намерений:** Просто верни `payload:`, если нет очевидных данных для извлечения.
 
 **Твой ответ (в формате `ключ:значение`):**
 """
 
-async def classify_intent(user_input: str) -> str:
+async def classify_intent(user_input: str, is_admin: bool = False) -> str:
     """Шаг 1: Определяет только тип намерения."""
-    if not GEMINI_API_KEY: return "UNSUPPORTED_INTENT"
+    if not GEMINI_API_KEY:
+        return "UNSUPPORTED_INTENT"
     prompt = CLASSIFY_INTENT_PROMPT.format(user_input=user_input)
+    if is_admin:
+        prompt += "\n(Запрос от администратора)"
     
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -87,10 +92,13 @@ async def classify_intent(user_input: str) -> str:
         return "UNSUPPORTED_INTENT"
 
 
-async def extract_entities(intent: str, user_input: str) -> Dict[str, str]:
+async def extract_entities(intent: str, user_input: str, is_admin: bool = False) -> Dict[str, str]:
     """Шаг 2: Извлекает данные для конкретного намерения."""
-    if not GEMINI_API_KEY: return {"payload": "AI_SERVICE_UNCONFIGURED"}
+    if not GEMINI_API_KEY:
+        return {"payload": "AI_SERVICE_UNCONFIGURED"}
     prompt = EXTRACT_ENTITIES_PROMPT.format(intent=intent, user_input=user_input)
+    if is_admin:
+        prompt += "\n(Запрос от администратора)"
     
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:

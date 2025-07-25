@@ -23,3 +23,8 @@ apscheduler
 beautifulsoup4
 requests
 openai
+
+# --- Генерация PDF и графиков ---
+fpdf2
+matplotlib
+
