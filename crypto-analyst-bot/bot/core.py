@@ -339,6 +339,35 @@ async def handle_feedback(update: Update, context: CallbackContext, payload: str
     await update.effective_message.reply_text(get_text(lang, 'feedback_thanks'))
 
 
+async def handle_recommend(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
+    """Отправляет персональные рекомендации пользователю."""
+    if not update.effective_message:
+        return
+
+    from ai.recommender import generate_recommendations
+
+    lang = context.user_data.get('lang', 'ru')
+    recs = await generate_recommendations(db_session, update.effective_user.id)
+
+    if not recs:
+        await update.effective_message.reply_text(get_text(lang, 'recommend_none'))
+        return
+
+    lines = [get_text(lang, 'recommend_header')]
+    for r in recs:
+        if r[0] == 'subscribe':
+            lines.append(get_text(lang, 'recommend_subscription'))
+        elif r[0] == 'renew':
+            lines.append(get_text(lang, 'recommend_renew', date=r[1]))
+        elif r[0] == 'course':
+            price = f"{r[3]}⭐" if r[3] > 0 else get_text(lang, 'course_free')
+            lines.append(get_text(lang, 'recommend_course', id=r[1], title=r[2], price=price))
+        elif r[0] == 'product':
+            lines.append(get_text(lang, 'recommend_product', id=r[1], name=r[2], price=f"{r[3]}⭐"))
+
+    await update.effective_message.reply_text('\n'.join(lines), parse_mode=constants.ParseMode.MARKDOWN)
+
+
 async def handle_subscribe(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     """Отправляет ссылку на оплату подписки через звёзды."""
     lang = context.user_data.get('lang', 'ru')
@@ -564,6 +593,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         '/subscribe': handle_subscribe,
         '/course': handle_course_command,
         '/feedback': handle_feedback,
+        '/recommend': handle_recommend,
     }
     for cmd, func in hardcoded_commands.items():
         if user_input.lower().startswith(cmd):
