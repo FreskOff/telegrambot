@@ -80,5 +80,7 @@
   "portfolio_coin_missing": "Монета не найдена в портфеле.",
   "subscription_link_missing": "Ссылка для подписки не настроена.",
   "purchase_open_form": "Откройте форму оплаты для завершения покупки.",
-  "crypto_partial_missing": "Не удалось найти информацию по: {coins}"
+  "crypto_partial_missing": "Не удалось найти информацию по: {coins}",
+  "feedback_prompt": "Пожалуйста, отправьте текст отзыва после команды /feedback.",
+  "feedback_thanks": "✅ Спасибо за отзыв! Он передан администрации."
 }

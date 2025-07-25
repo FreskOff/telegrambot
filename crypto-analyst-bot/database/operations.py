@@ -322,6 +322,28 @@ async def get_chat_history(session: AsyncSession, user_id: int, limit: int = 10)
     result = await session.execute(select(ChatHistory).filter(ChatHistory.user_id == user_id).order_by(desc(ChatHistory.timestamp)).limit(limit))
     return list(reversed(result.scalars().all()))
 
+# --- Отзывы ---
+async def add_feedback(session: AsyncSession, user_id: int, text: str) -> ChatHistory:
+    """Сохраняет отзыв пользователя."""
+    return await add_chat_message(
+        session=session,
+        user_id=user_id,
+        role="user",
+        text=text,
+        event="feedback",
+    )
+
+
+async def get_feedback_messages(session: AsyncSession, limit: int = 100) -> List[ChatHistory]:
+    """Возвращает последние отзывы пользователей."""
+    result = await session.execute(
+        select(ChatHistory)
+        .filter(ChatHistory.event == "feedback")
+        .order_by(desc(ChatHistory.timestamp))
+        .limit(limit)
+    )
+    return result.scalars().all()
+
 # --- Операции с Магазином ---
 async def list_products(session: AsyncSession):
     result = await session.execute(select(Product).filter(Product.is_active == True))
