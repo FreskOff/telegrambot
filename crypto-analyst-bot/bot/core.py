@@ -21,7 +21,11 @@ from utils.validators import is_valid_id, is_valid_symbol
 # --- Импорт всех модулей проекта ---
 from ai.dispatcher import classify_intent, extract_entities
 from database import operations as db_ops
-from crypto.handler import handle_crypto_info_request
+from crypto.handler import (
+    handle_crypto_info_request,
+    COIN_ID_MAP,
+    get_coin_ids_from_symbols,
+)
 from settings.user import (
     handle_setup_alert,
     handle_manage_alerts,
