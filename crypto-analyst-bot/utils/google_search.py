@@ -2,7 +2,7 @@ import logging
 from types import SimpleNamespace
 from typing import List, Dict
 
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 logger = logging.getLogger(__name__)
 
