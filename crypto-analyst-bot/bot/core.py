@@ -5,7 +5,14 @@ import logging
 import os
 import re
 from datetime import datetime
-from telegram import Update, constants, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+from telegram import (
+    Update,
+    constants,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    ReplyKeyboardMarkup,
+    LabeledPrice,
+)
 from telegram.ext import CallbackContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,6 +49,20 @@ router = IntentRouter()
 # Стоимость подписки в звёздах и описание платежа
 SUBSCRIPTION_PRICE = int(os.getenv("SUBSCRIPTION_PRICE", "20"))
 SUBSCRIPTION_DESC = os.getenv("SUBSCRIPTION_DESC", "Channel subscription")
+
+
+async def send_stars_payment_request(update: Update, context: CallbackContext, amount: int = SUBSCRIPTION_PRICE) -> None:
+    """Отправляет пользователю счёт в Telegram Stars."""
+    chat_id = update.effective_message.chat_id
+    await context.bot.send_invoice(
+        chat_id=chat_id,
+        title="Премиум-подписка",
+        description="Доступ к эксклюзивным материалам на месяц.",
+        payload="premium-subscription-monthly",
+        provider_token="STARS",
+        currency="XTR",
+        prices=[LabeledPrice("Подписка на 1 месяц", amount)],
+    )
 
 # Main menu keyboard
 def build_main_menu(lang: str) -> ReplyKeyboardMarkup:
@@ -459,14 +480,7 @@ async def handle_subscribe(update: Update, context: CallbackContext, payload: st
     await db_ops.create_or_update_subscription(db_session, update.effective_user.id, is_active=False, level=level)
 
     try:
-        await context.bot._post(
-            "payments.sendStarsForm",
-            data={
-                "user_id": update.effective_user.id,
-                "amount": SUBSCRIPTION_PRICE,
-                "description": SUBSCRIPTION_DESC,
-            },
-        )
+        await send_stars_payment_request(update, context, SUBSCRIPTION_PRICE)
         await update.effective_message.reply_text(
             get_text(lang, 'subscribe_info'),
             parse_mode=constants.ParseMode.MARKDOWN,
@@ -661,6 +675,10 @@ async def get_symbol_from_context(session: AsyncSession, user_id: int) -> str | 
     return None
 
 async def handle_update(update: Update, context: CallbackContext, db_session: AsyncSession):
+    if update.pre_checkout_query:
+        await context.bot.answer_pre_checkout_query(update.pre_checkout_query.id, ok=True)
+        return
+
     message = update.effective_message
     user = update.effective_user
     if not user or not message:
