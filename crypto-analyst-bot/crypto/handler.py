@@ -93,5 +93,7 @@ async def handle_crypto_info_request(update: Update, context: CallbackContext, p
         await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=formatted_response)
 
     except Exception as e:
-        logger.error(f"Ошибка при обработке крипто-запроса: {e}", exc_info=True)
-        await update.effective_message.reply_text(get_text(lang, 'crypto_api_error'))
+        logger.exception(f"Ошибка при обработке крипто-запроса: {e}")
+        await update.effective_message.reply_text(
+            get_text(lang, 'crypto_api_error', error=str(e))
+        )

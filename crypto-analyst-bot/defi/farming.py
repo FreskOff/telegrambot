@@ -21,8 +21,10 @@ async def handle_defi_farming(update: Update, context: CallbackContext, payload:
             resp.raise_for_status()
             data = resp.json().get('data', [])
     except Exception as e:
-        logger.error(f"DefiLlama request failed: {e}")
-        await update.effective_message.reply_text(get_text(lang, 'defi_no_data'))
+        logger.exception(f"DefiLlama request failed: {e}")
+        await update.effective_message.reply_text(
+            get_text(lang, 'defi_api_error', error=str(e))
+        )
         return
 
     if not data:

@@ -26,8 +26,10 @@ async def handle_nft_analytics(update: Update, context: CallbackContext, payload
             resp.raise_for_status()
             data = resp.json().get('stats', {})
     except Exception as e:
-        logger.error(f"OpenSea request failed: {e}")
-        await update.effective_message.reply_text(get_text(lang, 'nft_no_data'))
+        logger.exception(f"OpenSea request failed: {e}")
+        await update.effective_message.reply_text(
+            get_text(lang, 'nft_api_error', error=str(e))
+        )
         return
 
     if not data:
