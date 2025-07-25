@@ -67,6 +67,29 @@ async def get_user_stats(session: AsyncSession, user_id: int) -> dict:
         "message_count": count,
     }
 
+# --- Работа со звёздами ---
+async def get_star_balance(session: AsyncSession, user_id: int) -> int:
+    result = await session.execute(select(User.stars_balance).filter(User.id == user_id))
+    balance = result.scalar_one_or_none()
+    return balance or 0
+
+async def add_stars(session: AsyncSession, user_id: int, amount: int):
+    if not amount:
+        return
+    await session.execute(
+        sqlalchemy_update(User)
+        .where(User.id == user_id)
+        .values(stars_balance=User.stars_balance + amount)
+    )
+    await session.commit()
+
+async def deduct_stars(session: AsyncSession, user_id: int, amount: int) -> bool:
+    balance = await get_star_balance(session, user_id)
+    if balance < amount:
+        return False
+    await add_stars(session, user_id, -amount)
+    return True
+
 # --- Операции с Алертами ---
 async def add_price_alert(session: AsyncSession, user_id: int, symbol: str, price: float, direction: str) -> PriceAlert:
     """Добавляет новый ценовой алерт для пользователя."""

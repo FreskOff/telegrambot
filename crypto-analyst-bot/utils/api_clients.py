@@ -73,6 +73,12 @@ class CoinGeckoClient:
         logger.warning(f"Монета по запросу '{query}' не найдена.")
         return None
 
+    async def get_market_chart(self, coin_id: str, vs_currency: str = 'usd', days: int = 30) -> Optional[Dict]:
+        """Возвращает исторические данные цены за указанный период."""
+        endpoint = f"/coins/{coin_id}/market_chart"
+        params = {"vs_currency": vs_currency, "days": days}
+        return await self._request(endpoint, params)
+
 # Создаем один экземпляр клиента для использования во всем приложении
 coingecko_client = CoinGeckoClient()
 
