@@ -24,7 +24,11 @@ if not DATABASE_URL:
 # `create_async_engine` создает пул соединений для асинхронной работы.
 # `echo=False` в продакшене, можно поставить `True` для отладки SQL-запросов.
 try:
-    engine = create_async_engine(DATABASE_URL, echo=False)
+    engine = create_async_engine(
+        DATABASE_URL,
+        echo=False,
+        pool_pre_ping=True  # ОБЯЗАТЕЛЬНО для Railway и других облаков
+    )
 except Exception as e:
     logger.error(f"Не удалось создать движок SQLAlchemy: {e}")
     raise
