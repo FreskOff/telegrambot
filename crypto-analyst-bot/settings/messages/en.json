@@ -49,16 +49,16 @@
   "alert_triggered": "\uD83D\uDD14 *Alert triggered!* \uD83D\uDD14\n\nPrice of *{symbol}* has {direction_text} your target!\n\n\uD83C\uDFC6 Target: *${target_price}*\n\uD83D\uDCC8 Current price: *${current_price}*",
   "analysis_premium_start": "\u23F3 Generating extended report. This may take up to a minute...",
   "analysis_premium_insufficient": "\u274C Not enough stars. {price}\u2B50 required for the full report",
-  "analysis_premium_done": "\uD83D\uDCC4 Extended report is ready."
-  ,"shop_header": "\uD83D\uDECD Available goods:",
+  "analysis_premium_done": "\uD83D\uDCC4 Extended report is ready.",
+  "shop_header": "\uD83D\uDECD Available goods:",
   "shop_hint": "Use /buy <id> to purchase",
   "shop_empty": "No goods available.",
   "purchase_success": "\u2705 Purchased *{product}* successfully!",
-  "purchase_error": "\u274C Failed to process purchase."
-  ,"subscribe_info": "Subscribe to our premium channel for exclusive reports. Use the button below to pay with stars.",
-  "subscribe_button": "Pay subscription"
-  ,"subscription_reminder": "Your subscription is inactive. Please renew to keep access.",
-  "subscription_access_granted": "Access granted! Join our premium channel: {link}"
+  "purchase_error": "\u274C Failed to process purchase.",
+  "subscribe_info": "Subscribe to our premium channel for exclusive reports. Use the button below to pay with stars.",
+  "subscribe_button": "Pay subscription",
+  "subscription_reminder": "Your subscription is inactive. Please renew to keep access.",
+  "subscription_access_granted": "Access granted! Join our premium channel: {link}",
   "course_list_header": "\uD83C\uDF93 Available courses:",
   "course_list_hint": "Details: /course info <id>. Buy: /course buy <id>",
   "course_free": "free",
@@ -68,5 +68,17 @@
   "course_already_owned": "You already bought this course.",
   "course_send_error": "Failed to send course file.",
   "product_already_owned": "You already bought this product.",
-  "purchase_refund": "Purchase cancelled and stars refunded"
+  "purchase_refund": "Purchase cancelled and stars refunded",
+  "menu_prices": "Prices",
+  "menu_analysis": "Analysis",
+  "menu_premarket": "Pre-market",
+  "menu_education": "Education",
+  "menu_portfolio": "Portfolio",
+  "menu_shop": "Shop",
+  "menu_subscribe": "Subscription",
+  "menu_settings": "Settings",
+  "portfolio_coin_missing": "Coin not found in portfolio.",
+  "subscription_link_missing": "Subscription link not configured.",
+  "purchase_open_form": "Open the payment form to complete the purchase.",
+  "crypto_partial_missing": "Could not find info for: {coins}"
 }
