@@ -57,8 +57,12 @@ async def get_or_create_user(session: AsyncSession, tg_user: TelegramUser) -> Us
         db_user.last_contact_at = datetime.utcnow()
         updated = True
         if updated:
-            await safe_commit(session)
-            await session.refresh(db_user)
+            try:
+                await safe_commit(session)
+                await session.refresh(db_user)
+            except Exception as e:
+                logger.error(f"Ошибка при обновлении объекта после commit: {e}")
+                raise
         return db_user
     else:
         new_user = User(
@@ -70,8 +74,12 @@ async def get_or_create_user(session: AsyncSession, tg_user: TelegramUser) -> Us
             last_contact_at=datetime.utcnow(),
         )
         session.add(new_user)
-        await safe_commit(session)
-        await session.refresh(new_user)
+        try:
+            await safe_commit(session)
+            await session.refresh(new_user)
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении объекта после commit: {e}")
+            raise
         return new_user
 
 async def get_user(session: AsyncSession, user_id: int) -> Optional[User]:
@@ -183,8 +191,12 @@ async def add_price_alert(session: AsyncSession, user_id: int, symbol: str, pric
     alert_direction = AlertDirection.ABOVE if direction.lower() == 'above' else AlertDirection.BELOW
     new_alert = PriceAlert(user_id=user_id, coin_symbol=symbol.upper(), target_price=price, direction=alert_direction)
     session.add(new_alert)
-    await safe_commit(session)
-    await session.refresh(new_alert)
+    try:
+        await safe_commit(session)
+        await session.refresh(new_alert)
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении объекта после commit: {e}")
+        raise
     return new_alert
 
 async def get_user_alerts(session: AsyncSession, user_id: int) -> List[PriceAlert]:
@@ -240,8 +252,12 @@ async def add_coin_to_portfolio(
             coin.quantity = total_qty
         if buy_date:
             coin.purchase_date = buy_date
-        await safe_commit(session)
-        await session.refresh(coin)
+        try:
+            await safe_commit(session)
+            await session.refresh(coin)
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении объекта после commit: {e}")
+            raise
         return coin
 
     new_coin = TrackedCoin(
@@ -252,8 +268,12 @@ async def add_coin_to_portfolio(
         purchase_date=buy_date,
     )
     session.add(new_coin)
-    await safe_commit(session)
-    await session.refresh(new_coin)
+    try:
+        await safe_commit(session)
+        await session.refresh(new_coin)
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении объекта после commit: {e}")
+        raise
     return new_coin
 
 
@@ -292,8 +312,12 @@ async def start_dialog(session: AsyncSession, user_id: int, topic: str | None = 
         return dialog
     dialog = Dialog(user_id=user_id, topic=topic)
     session.add(dialog)
-    await safe_commit(session)
-    await session.refresh(dialog)
+    try:
+        await safe_commit(session)
+        await session.refresh(dialog)
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении объекта после commit: {e}")
+        raise
     return dialog
 
 
@@ -368,8 +392,12 @@ async def add_chat_message(
         .where(User.id == user_id)
         .values(last_contact_at=datetime.utcnow())
     )
-    await safe_commit(session)
-    await session.refresh(new_message)
+    try:
+        await safe_commit(session)
+        await session.refresh(new_message)
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении объекта после commit: {e}")
+        raise
     return new_message
 
 async def update_chat_message(session: AsyncSession, message_id: int, **kwargs):
@@ -437,8 +465,12 @@ async def create_product(
         is_active=is_active,
     )
     session.add(product)
-    await safe_commit(session)
-    await session.refresh(product)
+    try:
+        await safe_commit(session)
+        await session.refresh(product)
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении объекта после commit: {e}")
+        raise
     return product
 
 async def update_product(session: AsyncSession, product_id: int, **kwargs) -> None:
@@ -456,8 +488,12 @@ async def delete_product(session: AsyncSession, product_id: int) -> None:
 async def add_purchase(session: AsyncSession, user_id: int, product_id: int):
     purchase = Purchase(user_id=user_id, product_id=product_id)
     session.add(purchase)
-    await safe_commit(session)
-    await session.refresh(purchase)
+    try:
+        await safe_commit(session)
+        await session.refresh(purchase)
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении объекта после commit: {e}")
+        raise
     await update_usage_stats(session, user_id)
     return purchase
 
@@ -485,8 +521,12 @@ async def create_or_update_subscription(
     else:
         sub = Subscription(user_id=user_id, is_active=is_active, next_payment=next_payment, level=level)
         session.add(sub)
-    await safe_commit(session)
-    await session.refresh(sub)
+    try:
+        await safe_commit(session)
+        await session.refresh(sub)
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении объекта после commit: {e}")
+        raise
     await update_usage_stats(session, user_id)
     return sub
 
@@ -529,8 +569,12 @@ async def create_course(
         is_active=is_active,
     )
     session.add(course)
-    await safe_commit(session)
-    await session.refresh(course)
+    try:
+        await safe_commit(session)
+        await session.refresh(course)
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении объекта после commit: {e}")
+        raise
     return course
 
 async def update_course(session: AsyncSession, course_id: int, **kwargs) -> None:
@@ -549,8 +593,12 @@ async def delete_course(session: AsyncSession, course_id: int) -> None:
 async def add_course_purchase(session: AsyncSession, user_id: int, course_id: int):
     purchase = CoursePurchase(user_id=user_id, course_id=course_id)
     session.add(purchase)
-    await safe_commit(session)
-    await session.refresh(purchase)
+    try:
+        await safe_commit(session)
+        await session.refresh(purchase)
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении объекта после commit: {e}")
+        raise
     return purchase
 
 
