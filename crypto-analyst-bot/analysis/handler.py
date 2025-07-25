@@ -147,7 +147,7 @@ def _write_markdown(text: str) -> str:
         f.write(text)
     return tmp.name
 
-async def _generate_extended_report(symbol: str, search_results: list, db_session: AsyncSession) -> tuple[str, str, str]:
+async def _generate_extended_report(symbol: str, search_results: list, db_session: AsyncSession) -> tuple[str, str, str, str]:
     history = await _fetch_price_history(symbol)
     prompt = EXTENDED_ANALYSIS_PROMPT.format(
         user_query=symbol,
@@ -158,7 +158,7 @@ async def _generate_extended_report(symbol: str, search_results: list, db_sessio
     chart = _create_price_chart(history, symbol)
     pdf = _generate_pdf(text, chart)
     md = _write_markdown(text)
-    return text, pdf, md
+    return text, pdf, md, chart
 
 async def handle_token_analysis(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     if not update.effective_message:
@@ -215,7 +215,7 @@ async def handle_token_analysis(update: Update, context: CallbackContext, payloa
 
         search_results = search_results_list[0].results
         if extended:
-            analysis_text, pdf_path, md_path = await _generate_extended_report(token, search_results, db_session)
+            analysis_text, pdf_path, md_path, chart_path = await _generate_extended_report(token, search_results, db_session)
         else:
             prompt = ANALYSIS_PROMPT.format(
                 user_query=token,
@@ -228,9 +228,19 @@ async def handle_token_analysis(update: Update, context: CallbackContext, payloa
             if not premium:
                 await db_ops.deduct_stars(db_session, user_id, EXTENDED_ANALYSIS_PRICE)
             with open(pdf_path, 'rb') as pf:
-                await update.effective_message.reply_document(pf, filename=f"{token}_report.pdf", caption=final_message, parse_mode=constants.ParseMode.MARKDOWN)
+                await update.effective_message.reply_document(
+                    pf,
+                    filename=f"{token}_report.pdf",
+                    caption=final_message,
+                    parse_mode=constants.ParseMode.MARKDOWN,
+                )
             with open(md_path, 'rb') as mf:
                 await update.effective_message.reply_document(mf, filename=f"{token}_report.md")
+            for path in (pdf_path, md_path, chart_path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
         else:
             await update.effective_message.reply_text(
                 final_message,
