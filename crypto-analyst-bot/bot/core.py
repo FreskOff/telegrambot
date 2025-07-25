@@ -5,7 +5,7 @@ import logging
 import os
 import re
 from datetime import datetime
-from telegram import Update, constants, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, constants, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
 from telegram.ext import CallbackContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +29,16 @@ from utils.api_clients import coinmarketcap_client, binance_client
 from utils.charts import create_price_chart
 
 logger = logging.getLogger(__name__)
+# Main menu keyboard
+def build_main_menu(lang: str) -> ReplyKeyboardMarkup:
+    buttons = [
+        [get_text(lang, "menu_prices"), get_text(lang, "menu_analysis")],
+        [get_text(lang, "menu_premarket"), get_text(lang, "menu_education")],
+        [get_text(lang, "menu_portfolio"), get_text(lang, "menu_shop")],
+        [get_text(lang, "menu_subscribe"), get_text(lang, "menu_settings")]
+    ]
+    return ReplyKeyboardMarkup(buttons, resize_keyboard=True)
+
 
 # --- Обработчики и заглушки ---
 async def handle_unsupported_request(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
@@ -44,11 +54,11 @@ async def handle_unsupported_request(update: Update, context: CallbackContext, p
 
 async def handle_bot_help(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     user_id = update.effective_user.id
-    lang = context.user_data.get('lang', 'ru')
-    lang = context.user_data.get('lang', 'ru')
-    help_text = get_text(lang, 'bot_help')
-    await update.effective_message.reply_text(help_text, parse_mode=constants.ParseMode.MARKDOWN)
-    await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=help_text)
+    lang = context.user_data.get("lang", "ru")
+    help_text = get_text(lang, "bot_help")
+    keyboard = build_main_menu(lang)
+    await update.effective_message.reply_text(help_text, parse_mode=constants.ParseMode.MARKDOWN, reply_markup=keyboard)
+    await db_ops.add_chat_message(session=db_session, user_id=user_id, role="model", text=help_text)
 
 # ... (все остальные заглушки)
 async def handle_where_to_buy(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
@@ -227,7 +237,7 @@ async def handle_buy_product(update: Update, context: CallbackContext, payload: 
             data={"user_id": update.effective_user.id, "amount": product.stars_price, "description": product.name},
         )
         context.user_data['pending_product_purchase'] = product_id
-        await update.effective_message.reply_text("Open the payment form to complete the purchase")
+        await update.effective_message.reply_text(get_text(lang, "purchase_open_form"))
     except Exception as e:
         logger.error(f"Payment failed for {update.effective_user.id}: {e}")
         await update.effective_message.reply_text(get_text(lang, 'purchase_error'))
@@ -315,7 +325,7 @@ async def handle_subscribe(update: Update, context: CallbackContext, payload: st
     lang = context.user_data.get('lang', 'ru')
     pay_link = os.getenv('SUBSCRIPTION_LINK')
     if not pay_link:
-        await update.effective_message.reply_text('Subscription link not configured.')
+        await update.effective_message.reply_text(get_text(lang, 'subscription_link_missing'))
         return
 
     await db_ops.create_or_update_subscription(db_session, update.effective_user.id, is_active=False)
@@ -417,7 +427,7 @@ async def handle_portfolio_summary(update: Update, context: CallbackContext, pay
             await update.effective_message.reply_text(get_text(lang, 'track_missing_symbol'))
             return
         removed = await db_ops.remove_coin_from_portfolio(db_session, user_id, symbol)
-        response = get_text(lang, 'coin_removed') if removed else "Монета не найдена в портфеле."
+        response = get_text(lang, 'coin_removed') if removed else get_text(lang, "portfolio_coin_missing")
 
     elif action in ("chart", "charts", "graph"):
         portfolio = await db_ops.get_user_portfolio(db_session, user_id)

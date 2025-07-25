@@ -81,7 +81,8 @@ async def handle_crypto_info_request(update: Update, context: CallbackContext, p
         formatted_response = await format_data_with_ai(price_data)
 
         if not_found:
-            formatted_response += f"\n\n_Не удалось найти информацию по: {', '.join(not_found)}_"
+            missing = get_text(lang, 'crypto_partial_missing', coins=', '.join(not_found))
+            formatted_response += f"\n\n_{missing}_"
 
         await update.effective_message.reply_text(
             formatted_response,
