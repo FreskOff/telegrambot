@@ -15,6 +15,7 @@ from .models import (
     User,
     PriceAlert,
     TrackedCoin,
+    Dialog,
     AlertDirection,
     ChatHistory,
     Product,
@@ -268,6 +269,53 @@ async def remove_coin_from_portfolio(session: AsyncSession, user_id: int, symbol
     await session.commit()
     return True
 
+# --- Операции с Диалогами ---
+async def get_active_dialog(session: AsyncSession, user_id: int) -> Optional[Dialog]:
+    result = await session.execute(
+        select(Dialog).filter(Dialog.user_id == user_id, Dialog.is_active == True)
+    )
+    return result.scalar_one_or_none()
+
+
+async def start_dialog(session: AsyncSession, user_id: int, topic: str | None = None) -> Dialog:
+    dialog = await get_active_dialog(session, user_id)
+    if dialog:
+        return dialog
+    dialog = Dialog(user_id=user_id, topic=topic)
+    session.add(dialog)
+    await session.commit()
+    await session.refresh(dialog)
+    return dialog
+
+
+async def end_dialog(session: AsyncSession, dialog_id: int):
+    await session.execute(
+        sqlalchemy_update(Dialog)
+        .where(Dialog.id == dialog_id)
+        .values(is_active=False, ended_at=datetime.utcnow())
+    )
+    await session.commit()
+
+
+async def update_dialog(session: AsyncSession, dialog_id: int, **kwargs):
+    if not kwargs:
+        return
+    await session.execute(
+        sqlalchemy_update(Dialog).where(Dialog.id == dialog_id).values(**kwargs)
+    )
+    await session.commit()
+
+
+async def get_top_user_topics(session: AsyncSession, user_id: int, limit: int = 3) -> List[str]:
+    result = await session.execute(
+        select(ChatHistory.request_type, func.count())
+        .filter(ChatHistory.user_id == user_id, ChatHistory.request_type != None)
+        .group_by(ChatHistory.request_type)
+        .order_by(func.count().desc())
+        .limit(limit)
+    )
+    return [row[0] for row in result.all()]
+
 # --- Операции с Историей Чата ---
 async def add_chat_message(
     session: AsyncSession,
@@ -275,6 +323,7 @@ async def add_chat_message(
     role: str,
     text: str,
     *,
+    dialog_id: Optional[int] = None,
     request_type: Optional[str] = None,
     entities: Optional[Any] = None,
     duration_ms: Optional[int] = None,
@@ -283,8 +332,12 @@ async def add_chat_message(
 ) -> ChatHistory:
     """Добавляет новое сообщение в историю чата пользователя."""
     user = await get_user(session, user_id)
+    if dialog_id is None:
+        dialog = await start_dialog(session, user_id)
+        dialog_id = dialog.id
     new_message = ChatHistory(
         user_id=user_id,
+        dialog_id=dialog_id,
         role=role,
         message_text=text,
         username_hash=hash_value(user.username) if user else None,

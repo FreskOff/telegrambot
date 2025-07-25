@@ -91,4 +91,6 @@
   "recommend_renew": "Your subscription ends on {date}. Please renew to keep access.",
   "recommend_course": "• Course *{title}* — {price} (/course buy {id})",
   "recommend_product": "• {name} — {price} (/buy {id})"
+  "top_topics_hint": "You often ask about: {topics}",
+  "full_report_btn": "Full report for 100⭐"
 }

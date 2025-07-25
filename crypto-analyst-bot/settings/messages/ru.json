@@ -91,4 +91,6 @@
   "recommend_renew": "Ваша подписка истекает {date}. Продлите её, чтобы сохранить доступ.",
   "recommend_course": "• Курс *{title}* — {price} (/course buy {id})",
   "recommend_product": "• {name} — {price} (/buy {id})"
+  "top_topics_hint": "Вас часто интересуют темы: {topics}",
+  "full_report_btn": "Полный отчёт за 100⭐"
 }
