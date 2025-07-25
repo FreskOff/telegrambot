@@ -70,6 +70,16 @@ class ChatHistory(Base):
     user_id = Column(BigInteger, ForeignKey('users.id'), nullable=False, index=True)
     role = Column(String, nullable=False)
     message_text = Column(Text, nullable=False)
+    username_hash = Column(String, nullable=True)
+    first_name_hash = Column(String, nullable=True)
+    language = Column(String, nullable=False, default='ru')
+    timezone = Column(String, nullable=False, default='UTC')
+    currency = Column(String, nullable=False, default='USD')
+    request_type = Column(String, nullable=True, index=True)
+    entities = Column(Text, nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    error = Column(Boolean, nullable=False, default=False)
+    event = Column(String, nullable=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     user = relationship("User", back_populates="chat_history")
 
@@ -172,4 +182,17 @@ class CoursePurchase(Base):
 
     user = relationship('User')
     course = relationship('Course')
+
+
+class UsageStats(Base):
+    """Агрегированные статистики активности пользователя."""
+
+    __tablename__ = 'usage_stats'
+
+    user_id = Column(BigInteger, ForeignKey('users.id'), primary_key=True)
+    last_activity = Column(DateTime(timezone=True))
+    stars_spent = Column(Integer, nullable=False, default=0)
+    favorite_function = Column(String, nullable=True)
+
+    user = relationship('User')
 

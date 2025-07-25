@@ -305,6 +305,13 @@ async def handle_course_command(update: Update, context: CallbackContext, payloa
                     data={"user_id": update.effective_user.id, "amount": course.stars_price, "description": course.title},
                 )
             await db_ops.add_course_purchase(db_session, update.effective_user.id, course_id)
+            await db_ops.add_chat_message(
+                session=db_session,
+                user_id=update.effective_user.id,
+                role='system',
+                text=f'course purchase {course.title}',
+                event='purchase'
+            )
             await update.effective_message.reply_text(get_text(lang, 'course_purchased', title=course.title), parse_mode=constants.ParseMode.MARKDOWN)
 
         if course.content_type == 'text' and course.file_id:
@@ -354,6 +361,13 @@ async def handle_stars_payment(update: Update, context: CallbackContext, db_sess
         await db_ops.create_or_update_subscription(
             db_session, user_id, is_active=active, next_payment=next_payment
         )
+        await db_ops.add_chat_message(
+            session=db_session,
+            user_id=user_id,
+            role='system',
+            text='subscription update',
+            event='subscription'
+        )
         channel_id = os.getenv('PRIVATE_CHANNEL_ID')
         if active and channel_id:
             try:
@@ -370,6 +384,13 @@ async def handle_stars_payment(update: Update, context: CallbackContext, db_sess
             product = await db_ops.get_product(db_session, pending_product)
             if product and not await db_ops.has_purchased(db_session, user_id, pending_product):
                 await db_ops.add_purchase(db_session, user_id, pending_product)
+                await db_ops.add_chat_message(
+                    session=db_session,
+                    user_id=user_id,
+                    role='system',
+                    text=f'purchased {product.name}',
+                    event='purchase'
+                )
                 await context.bot.send_message(
                     user_id,
                     get_text(context.user_data.get('lang', 'ru'), 'purchase_success', product=product.name),
@@ -508,7 +529,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
     logger.info(f"Обработка сообщения от {db_user.id}: '{user_input}'")
     context.user_data['lang'] = db_user.language
     
-    await db_ops.add_chat_message(session=db_session, user_id=user.id, role='user', text=user_input)
+    user_msg = await db_ops.add_chat_message(session=db_session, user_id=user.id, role='user', text=user_input)
 
     # --- Обработка встроенных команд БЕЗ AI ---
     hardcoded_commands = {
@@ -530,6 +551,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
             await func(update, context, arg, db_session)
             return
 
+    start_ts = datetime.utcnow()
     try:
         await context.bot.send_chat_action(chat_id=message.chat_id, action=constants.ChatAction.TYPING)
         
@@ -539,6 +561,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
 
         # Шаг 2: Извлечение данных
         entities = await extract_entities(intent, user_input)
+        await db_ops.update_chat_message(db_session, user_msg.id, request_type=intent, entities=str(entities))
         logger.info(f"Шаг 2: Извлечены данные: {entities}")
 
         payload = next(iter(entities.values()))
@@ -569,8 +592,12 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         
         handler = handlers.get(intent, handle_unsupported_request)
         await handler(update, context, payload, db_session)
+        duration = int((datetime.utcnow() - start_ts).total_seconds() * 1000)
+        await db_ops.update_chat_message(db_session, user_msg.id, duration_ms=duration)
 
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}", exc_info=True)
         lang = context.user_data.get('lang', 'ru')
         await message.reply_text(get_text(lang, 'error_generic'))
+        duration = int((datetime.utcnow() - start_ts).total_seconds() * 1000)
+        await db_ops.update_chat_message(db_session, user_msg.id, duration_ms=duration, error=True)
