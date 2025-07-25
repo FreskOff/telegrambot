@@ -12,6 +12,10 @@ from settings.messages import get_text
 
 logger = logging.getLogger(__name__)
 
+# Limits for free users
+MAX_FREE_ALERTS = 2
+MAX_FREE_PORTFOLIO_COINS = 5
+
 async def handle_setup_alert(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     """
     Обрабатывает установку нового ценового алерта.
@@ -40,6 +44,13 @@ async def handle_setup_alert(update: Update, context: CallbackContext, payload: 
         
         if symbol not in COIN_ID_MAP:
             await update.effective_message.reply_text(get_text(lang, 'unknown_symbol_alert', symbol=symbol))
+            return
+
+        # Check free alert limit for non-subscribers
+        alerts = await db_ops.get_user_alerts(db_session, user_id)
+        subscription = await db_ops.get_subscription(db_session, user_id)
+        if len(alerts) >= MAX_FREE_ALERTS and not (subscription and subscription.is_active):
+            await update.effective_message.reply_text(get_text(lang, 'alert_limit', limit=MAX_FREE_ALERTS))
             return
 
         price = float(price_str)
