@@ -495,3 +495,19 @@ async def has_purchased_course(session: AsyncSession, user_id: int, course_id: i
         select(CoursePurchase).filter(CoursePurchase.user_id == user_id, CoursePurchase.course_id == course_id)
     )
     return result.scalar_one_or_none() is not None
+
+
+async def list_user_purchases(session: AsyncSession, user_id: int) -> list[Purchase]:
+    """Возвращает все покупки пользователя."""
+    result = await session.execute(
+        select(Purchase).filter(Purchase.user_id == user_id)
+    )
+    return result.scalars().all()
+
+
+async def list_user_course_purchases(session: AsyncSession, user_id: int) -> list[CoursePurchase]:
+    """Возвращает все покупки курсов пользователя."""
+    result = await session.execute(
+        select(CoursePurchase).filter(CoursePurchase.user_id == user_id)
+    )
+    return result.scalars().all()

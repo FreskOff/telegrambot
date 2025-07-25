@@ -84,5 +84,11 @@
   "feedback_prompt": "Send your feedback text after the /feedback command.",
   "feedback_thanks": "✅ Thank you for your feedback! It was sent to the admin.",
   "alert_limit": "⚠️ Free plan allows only {limit} alerts. Consider subscribing for more.",
-  "portfolio_limit": "⚠️ Free plan allows only {limit} coins in your portfolio."
+  "portfolio_limit": "⚠️ Free plan allows only {limit} coins in your portfolio.",
+  "recommend_header": "🤖 *Personal recommendations:*",
+  "recommend_none": "No new recommendations.",
+  "recommend_subscription": "You use the bot a lot. Consider subscribing to premium.",
+  "recommend_renew": "Your subscription ends on {date}. Please renew to keep access.",
+  "recommend_course": "• Course *{title}* — {price} (/course buy {id})",
+  "recommend_product": "• {name} — {price} (/buy {id})"
 }
