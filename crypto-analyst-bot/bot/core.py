@@ -32,6 +32,7 @@ from analysis.metrics import gather_metrics
 from defi.farming import handle_defi_farming
 from nft.analytics import handle_nft_analytics
 from depin.projects import handle_depin_projects
+from crypto.news import handle_news_command
 
 logger = logging.getLogger(__name__)
 # Main menu keyboard
@@ -688,6 +689,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         '/defi': handle_defi_farming,
         '/nft': handle_nft_analytics,
         '/depin': handle_depin_projects,
+        '/news': handle_news_command,
     }
     for cmd, func in hardcoded_commands.items():
         if user_input.lower().startswith(cmd):
