@@ -327,6 +327,17 @@ async def handle_course_command(update: Update, context: CallbackContext, payloa
         return
 
 
+async def handle_feedback(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
+    """Сохраняет отзыв пользователя."""
+    lang = context.user_data.get('lang', 'ru')
+    text = payload.strip()
+    if not text:
+        await update.effective_message.reply_text(get_text(lang, 'feedback_prompt'))
+        return
+    await db_ops.add_feedback(db_session, update.effective_user.id, text)
+    await update.effective_message.reply_text(get_text(lang, 'feedback_thanks'))
+
+
 async def handle_subscribe(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     """Отправляет ссылку на оплату подписки через звёзды."""
     lang = context.user_data.get('lang', 'ru')
@@ -543,6 +554,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         '/buy': handle_buy_product,
         '/subscribe': handle_subscribe,
         '/course': handle_course_command,
+        '/feedback': handle_feedback,
     }
     for cmd, func in hardcoded_commands.items():
         if user_input.lower().startswith(cmd):

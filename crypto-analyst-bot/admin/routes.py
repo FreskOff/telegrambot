@@ -99,3 +99,21 @@ async def create_course(
         file_id=file_id,
     )
     return {"id": course.id}
+
+
+# --- Feedback management ---
+@router.get("/feedback")
+async def list_feedback(
+    limit: int = 100,
+    authorized: bool = Depends(verify_credentials),
+    db: AsyncSession = Depends(get_db_session),
+):
+    messages = await db_ops.get_feedback_messages(db, limit)
+    return [
+        {
+            "user_id": m.user_id,
+            "text": m.message_text,
+            "timestamp": m.timestamp.isoformat(),
+        }
+        for m in messages
+    ]

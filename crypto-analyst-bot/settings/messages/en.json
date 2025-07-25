@@ -80,5 +80,7 @@
   "portfolio_coin_missing": "Coin not found in portfolio.",
   "subscription_link_missing": "Subscription link not configured.",
   "purchase_open_form": "Open the payment form to complete the purchase.",
-  "crypto_partial_missing": "Could not find info for: {coins}"
+  "crypto_partial_missing": "Could not find info for: {coins}",
+  "feedback_prompt": "Send your feedback text after the /feedback command.",
+  "feedback_thanks": "✅ Thank you for your feedback! It was sent to the admin."
 }
