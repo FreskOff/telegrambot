@@ -28,6 +28,7 @@ from analysis.handler import handle_token_analysis
 from crypto.pre_market import get_premarket_signals
 from utils.api_clients import coinmarketcap_client, binance_client
 from utils.charts import create_price_chart
+from analysis.metrics import gather_metrics
 
 logger = logging.getLogger(__name__)
 # Main menu keyboard
@@ -368,6 +369,71 @@ async def handle_recommend(update: Update, context: CallbackContext, payload: st
     await update.effective_message.reply_text('\n'.join(lines), parse_mode=constants.ParseMode.MARKDOWN)
 
 
+async def handle_admin_command(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
+    """Простейшая административная панель в чате."""
+    admin_id = os.getenv("ADMIN_TELEGRAM_ID")
+    if not admin_id or str(update.effective_user.id) != str(admin_id):
+        await update.effective_message.reply_text("Access denied")
+        return
+
+    parts = payload.split()
+    if not parts:
+        await update.effective_message.reply_text(
+            "Commands: users, stats <id>, products, courses, feedback, analytics"
+        )
+        return
+
+    cmd = parts[0]
+    if cmd == "users":
+        users = await db_ops.list_recent_users(db_session, 10)
+        lines = [f"{u.id} | {u.username}" for u in users]
+        await update.effective_message.reply_text("Users:\n" + "\n".join(lines))
+    elif cmd == "stats" and len(parts) > 1:
+        uid = int(parts[1])
+        user = await db_ops.get_user(db_session, uid)
+        if not user:
+            await update.effective_message.reply_text("User not found")
+            return
+        stats = await db_ops.get_user_stats(db_session, uid)
+        purchases = await db_ops.list_user_purchases(db_session, uid)
+        lines = [
+            f"User: {user.id} {user.username}",
+            f"Stats: {stats}",
+            "Purchases: " + ", ".join(str(p.product_id) for p in purchases) or "none",
+        ]
+        await update.effective_message.reply_text("\n".join(lines))
+    elif cmd == "products":
+        products = await db_ops.list_products(db_session)
+        lines = [f"{p.id}. {p.name} ({p.stars_price}⭐)" for p in products]
+        await update.effective_message.reply_text("Products:\n" + "\n".join(lines))
+    elif cmd == "courses":
+        courses = await db_ops.list_courses(db_session)
+        lines = [f"{c.id}. {c.title} ({c.stars_price}⭐)" for c in courses]
+        await update.effective_message.reply_text("Courses:\n" + "\n".join(lines))
+    elif cmd == "feedback":
+        msgs = await db_ops.get_feedback_messages(db_session, 10)
+        lines = [f"{m.user_id}: {m.message_text}" for m in msgs]
+        await update.effective_message.reply_text("Feedback:\n" + "\n".join(lines))
+    elif cmd == "analytics":
+        metrics = await gather_metrics(db_session)
+        top_products = await db_ops.get_most_purchased_products(db_session, 3)
+        top_requests = await db_ops.get_top_request_types(db_session, 3)
+        new_subs = await db_ops.new_subscriptions_count(db_session)
+        lost = await db_ops.inactive_users_count(db_session)
+        lines = [
+            f"Active users: {metrics['active_users']}",
+            f"Purchase freq: {metrics['purchase_frequency']:.2f}",
+            f"Subscriptions active: {metrics['subscriptions']['active']}/{metrics['subscriptions']['total']}",
+            f"New subs today: {new_subs}",
+            f"Inactive users: {lost}",
+            "Popular products:" + ", ".join(f"{n} ({c})" for n, c in top_products),
+            "Top requests:" + ", ".join(f"{n} ({c})" for n, c in top_requests),
+        ]
+        await update.effective_message.reply_text("\n".join(lines))
+    else:
+        await update.effective_message.reply_text("Unknown admin command")
+
+
 async def handle_subscribe(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     """Отправляет ссылку на оплату подписки через звёзды."""
     lang = context.user_data.get('lang', 'ru')
@@ -615,6 +681,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         '/course': handle_course_command,
         '/feedback': handle_feedback,
         '/recommend': handle_recommend,
+        '/admin': handle_admin_command,
     }
     for cmd, func in hardcoded_commands.items():
         if user_input.lower().startswith(cmd):
