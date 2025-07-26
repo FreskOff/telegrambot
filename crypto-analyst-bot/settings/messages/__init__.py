@@ -1,17 +1,25 @@
 import json
-import os
-from functools import lru_cache
+import logging
+import pathlib
 
-BASE_DIR = os.path.dirname(__file__)
+logger = logging.getLogger(__name__)
+messages = {}
 
-@lru_cache()
+
 def _load_messages():
-    messages = {}
-    for lang_file in ("ru.json", "en.json"):
-        path = os.path.join(BASE_DIR, lang_file)
-        lang = os.path.splitext(lang_file)[0]
-        with open(path, "r", encoding="utf-8") as f:
-            messages[lang] = json.load(f)
+    if messages:
+        return messages
+
+    base = pathlib.Path(__file__).with_suffix("")
+    for fp in base.glob("*.json"):
+        try:
+            with fp.open(encoding="utf-8") as f:
+                lang = fp.stem
+                messages[lang] = json.load(f)
+        except json.JSONDecodeError as e:
+            logger.error("⚠️  %s повреждён (%s). Пропускаю.", fp.name, e)
+            messages[fp.stem] = {}
+
     return messages
 
 
