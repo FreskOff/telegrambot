@@ -233,3 +233,40 @@ def test_buy_report_answers_callback(monkeypatch):
     monkeypatch.setattr(core, 'get_text', lambda *a, **k: 'purchase_open_form')
     asyncio.run(core.handle_buy_report(update, context, db_session=None))
     assert answered.get('ok')
+
+
+def test_buy_product_answers_callback(monkeypatch):
+    answered = {}
+
+    async def ans(*a, **k):
+        answered['ok'] = True
+
+    async def fake_invoice(*a, **k):
+        pass
+
+    monkeypatch.setattr(core, 'send_payment_invoice', fake_invoice)
+
+    async def reply(*a, **k):
+        pass
+
+    update = types.SimpleNamespace(
+        callback_query=types.SimpleNamespace(answer=ans),
+        effective_message=types.SimpleNamespace(chat_id=7, reply_text=reply),
+        effective_user=types.SimpleNamespace(id=7),
+    )
+    context = types.SimpleNamespace(bot=types.SimpleNamespace(id=1), user_data={})
+
+    product = types.SimpleNamespace(id=1, stars_price=5, name='P', content_type='text', content_value='t')
+
+    async def get_product(*a, **k):
+        return product
+
+    async def has_purchased(*a, **k):
+        return False
+
+    monkeypatch.setattr(core.db_ops, 'get_product', get_product)
+    monkeypatch.setattr(core.db_ops, 'has_purchased', has_purchased)
+    monkeypatch.setattr(core, 'get_text', lambda *a, **k: 'purchase_open_form')
+
+    asyncio.run(core.handle_buy_product(update, context, '1', db_session=None))
+    assert answered.get('ok')

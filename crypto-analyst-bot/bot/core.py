@@ -94,21 +94,15 @@ async def send_payment_invoice(
     """Отправляет счёт на оплату через Telegram Payments."""
     chat_id = update.effective_message.chat_id
     payload = f"{product_type}-{chat_id}"
-    if not PAYMENT_PROVIDER_TOKEN:
-        logger.error("PAYMENT_PROVIDER_TOKEN not set")
-        lang = context.user_data.get('lang', 'ru')
-        msg_key = 'subscription_link_missing' if product_type == 'subscription' else 'purchase_error'
-        await update.effective_message.reply_text(get_text(lang, msg_key))
-        return
 
     try:
         await context.bot.send_invoice(
             chat_id=chat_id,
             title=description,
-            description=description,
+            description="Оплата цифрового продукта",
             payload=payload,
-            provider_token=PAYMENT_PROVIDER_TOKEN,
-            currency="RUB",
+            provider_token="",
+            currency="XTR",
             prices=[LabeledPrice(description, amount)],
         )
     except Exception as e:
@@ -309,6 +303,8 @@ async def handle_shop(update: Update, context: CallbackContext, payload: str, db
 
 async def handle_buy_product(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     """Покупает товар по его ID через stars_form."""
+    if getattr(update, "callback_query", None):
+        await update.callback_query.answer()
     lang = context.user_data.get('lang', 'ru')
     if not is_valid_id(payload):
         await update.effective_message.reply_text(get_text(lang, 'purchase_error'))
