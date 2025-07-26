@@ -4,6 +4,7 @@
 import logging
 import os
 import re
+import asyncio
 from datetime import datetime, timedelta
 from telegram import (
     Update,
@@ -138,8 +139,9 @@ async def handle_where_to_buy(update: Update, context: CallbackContext, payload:
     )
 
     try:
-        pairs = await coinmarketcap_client.get_market_pairs(symbol)
-        binance_price = await binance_client.get_price(f"{symbol}USDT")
+        pairs_task = coinmarketcap_client.get_market_pairs(symbol)
+        price_task = binance_client.get_price(f"{symbol}USDT")
+        pairs, binance_price = await asyncio.gather(pairs_task, price_task)
 
         lines = [get_text(lang, 'where_to_buy_header', symbol=symbol)]
         if pairs:
