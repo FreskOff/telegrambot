@@ -6,6 +6,7 @@
 import os
 import logging
 from typing import List, Dict, Optional
+import asyncio
 from dotenv import load_dotenv
 import httpx
 from bs4 import BeautifulSoup
@@ -179,21 +180,23 @@ async def filter_events_by_market_cap(
     if min_cap <= 0 and max_cap is None:
         return events
 
-    filtered = []
-    for event in events:
+    async def check(event: Dict) -> Optional[Dict]:
         symbol = event.get("symbol")
         if not symbol:
-            continue
+            return None
         coin_id = await coingecko_client.search_coin(symbol)
         if not coin_id:
-            continue
+            return None
         data = await coingecko_client.get_simple_price(coin_ids=[coin_id])
         if not data or coin_id not in data:
-            continue
+            return None
         cap = data[coin_id].get("usd_market_cap") or 0
         if cap >= min_cap and (max_cap is None or cap <= max_cap):
-            filtered.append(event)
-    return filtered
+            return event
+        return None
+
+    results = await asyncio.gather(*(check(e) for e in events))
+    return [e for e in results if e]
 
 async def get_premarket_signals(
     vip: bool = False,
@@ -207,10 +210,16 @@ async def get_premarket_signals(
     base_limit = limit * 2 if vip else limit
     events: List[Dict] = []
 
-    events += await fetch_coinmarketcal_events(limit=base_limit)
-    events += await fetch_icodrops_upcoming(limit=base_limit)
-    events += await fetch_coingecko_events(limit=base_limit)
-    events += await fetch_cryptorank_events(limit=base_limit)
+    tasks = [
+        fetch_coinmarketcal_events(limit=base_limit),
+        fetch_icodrops_upcoming(limit=base_limit),
+        fetch_coingecko_events(limit=base_limit),
+        fetch_cryptorank_events(limit=base_limit),
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    for res in results:
+        if isinstance(res, list):
+            events += res
 
     if event_type:
         events = await filter_events_by_type(events, event_type)

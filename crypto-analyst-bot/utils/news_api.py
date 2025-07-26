@@ -2,6 +2,7 @@ import os
 import json
 import logging
 from typing import List, Dict
+import asyncio
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 
@@ -91,8 +92,10 @@ async def _fetch_coindesk(symbol: str, limit: int = 5) -> List[Dict]:
 
 
 async def get_news(symbol: str, limit: int = 5) -> List[Dict]:
-    news: List[Dict] = []
-    news += await _fetch_cryptopanic(symbol, limit)
-    news += await _fetch_coindesk(symbol, limit)
+    """Fetch news from multiple sources in parallel."""
+    cp_task = _fetch_cryptopanic(symbol, limit)
+    cd_task = _fetch_coindesk(symbol, limit)
+    cp_news, cd_news = await asyncio.gather(cp_task, cd_task)
+    news = cp_news + cd_news
     news.sort(key=lambda x: x.get("published_at") or "", reverse=True)
     return news[:limit]
