@@ -752,7 +752,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
 
     message = update.effective_message
     user = update.effective_user
-    if not user or not message:
+    if not user or not message or user.is_bot or user.id == getattr(context.bot, 'id', None):
         return
 
     if getattr(message, 'successful_payment', None) or getattr(message, 'stars', None):
