@@ -73,10 +73,9 @@ def _load_update_data(raw: bytes) -> list[dict]:
 async def process_update(update_data: dict) -> None:
     """Handle an incoming Telegram update in the background."""
     async with AsyncSessionFactory() as session:
-        async with application:
-            update = Update.de_json(update_data, bot)
-            context = CallbackContext.from_update(update, application)
-            await handle_update(update, context, session)
+        update = Update.de_json(update_data, bot)
+        context = CallbackContext.from_update(update, application)
+        await handle_update(update, context, session)
 
 
 # --- Обработчики событий FastAPI ---
@@ -86,6 +85,9 @@ async def process_update(update_data: dict) -> None:
 async def startup_event():
     logger.info("Приложение запускается...")
     await init_db()
+
+    await application.initialize()
+    await application.start()
 
     if WEBHOOK_URL:
         webhook_url_path = f"/webhook/{TELEGRAM_BOT_TOKEN}"
@@ -113,6 +115,8 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("Приложение останавливается...")
+    await application.stop()
+    await application.shutdown()
     await bot.delete_webhook()
     logger.info("Вебхук удален.")
 
