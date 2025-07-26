@@ -24,3 +24,15 @@ will suggest subscribing or waiting until the next day.
 
 Recommendation hints can be toggled with `/hints on` or `/hints off`. The same
 option is available via `/settings recommendations <on|off>`.
+
+## Performance tips
+
+For production deployments run several Uvicorn workers to handle webhooks in
+parallel:
+
+```bash
+uvicorn main:app --workers 2
+```
+
+The bot caches frequent requests such as prices and news in Redis to minimise
+external API calls.

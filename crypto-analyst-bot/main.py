@@ -7,6 +7,7 @@ import logging
 import json
 from datetime import datetime
 import uvicorn
+import asyncio
 from fastapi import FastAPI, Request, Response, Depends
 from dotenv import load_dotenv
 from starlette.requests import ClientDisconnect
@@ -16,8 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 # --- Настройка логирования ---
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ if not WEBHOOK_URL:
 
 # --- Импорт модулей бота ---
 from bot.core import handle_update
-from database.engine import init_db, get_db_session
+from database.engine import init_db, get_db_session, AsyncSessionFactory
 from background.scheduler import start_scheduler
 from analysis.metrics import gather_metrics
 from admin.routes import router as admin_router
@@ -53,28 +53,38 @@ application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 bot = application.bot
 
 
+async def process_update(update_data: dict) -> None:
+    """Handle an incoming Telegram update in the background."""
+    async with AsyncSessionFactory() as session:
+        async with application:
+            update = Update.de_json(update_data, bot)
+            context = CallbackContext.from_update(update, application)
+            await handle_update(update, context, session)
+
+
 # --- Обработчики событий FastAPI ---
+
 
 @app.on_event("startup")
 async def startup_event():
     logger.info("Приложение запускается...")
     await init_db()
-    
+
     if WEBHOOK_URL:
         webhook_url_path = f"/webhook/{TELEGRAM_BOT_TOKEN}"
         full_webhook_url = f"{WEBHOOK_URL.rstrip('/')}{webhook_url_path}"
-        
+
         logger.info(f"Установка вебхука на URL: {full_webhook_url}")
         success = await bot.set_webhook(
             url=full_webhook_url,
             allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True
+            drop_pending_updates=True,
         )
         if success:
             logger.info("Вебхук успешно установлен.")
         else:
             logger.error("Не удалось установить вебхук.")
-            
+
     # Запускаем планировщик фоновых задач
     start_scheduler(bot)
     logger.info("Планировщик запущен.")
@@ -88,6 +98,7 @@ async def shutdown_event():
 
 
 # --- Эндпоинты FastAPI ---
+
 
 @app.get("/", summary="Статус сервера")
 async def read_root():
@@ -119,13 +130,19 @@ async def payments_callback(
         amount = int(data.get("amount", 0))
         if amount:
             await db_ops.add_stars(db_session, user_id, amount)
-            await bot.send_message(user_id, get_text(lang, "purchase_success", product=f"+{amount}⭐"))
+            await bot.send_message(
+                user_id, get_text(lang, "purchase_success", product=f"+{amount}⭐")
+            )
     elif event_type == "product":
         product_id = data.get("product_id")
-        product = await db_ops.get_product(db_session, product_id) if product_id else None
+        product = (
+            await db_ops.get_product(db_session, product_id) if product_id else None
+        )
         if product and not await db_ops.has_purchased(db_session, user_id, product_id):
             await db_ops.add_purchase(db_session, user_id, product_id)
-            await bot.send_message(user_id, get_text(lang, "purchase_success", product=product.name))
+            await bot.send_message(
+                user_id, get_text(lang, "purchase_success", product=product.name)
+            )
             try:
                 if product.content_type == "text":
                     await bot.send_message(user_id, product.content_value)
@@ -138,35 +155,54 @@ async def payments_callback(
         level = data.get("level", "basic")
         next_ts = data.get("next_payment_date")
         next_payment = datetime.fromtimestamp(next_ts) if next_ts else None
-        await db_ops.create_or_update_subscription(db_session, user_id, is_active=True, next_payment=next_payment, level=level)
+        await db_ops.create_or_update_subscription(
+            db_session, user_id, is_active=True, next_payment=next_payment, level=level
+        )
         await bot.send_message(user_id, get_text(lang, f"subscription_{level}"))
     return {"ok": True}
 
 
 @app.post("/webhook/{token}", summary="Вебхук для Telegram")
 async def telegram_webhook(
-    request: Request,
-    token: str,
-    db_session: AsyncSession = Depends(get_db_session)
+    request: Request, token: str, db_session: AsyncSession = Depends(get_db_session)
 ):
     if token != TELEGRAM_BOT_TOKEN:
         return Response(status_code=403)
 
     try:
         update_data = await request.json()
-        
-        async with application:
-            update = Update.de_json(update_data, bot)
-            context = CallbackContext.from_update(update, application)
-            await handle_update(update, context, db_session)
+
+        update_preview = Update.de_json(update_data, bot)
+        if (
+            update_preview.callback_query is None
+            and update_preview.pre_checkout_query is None
+            and update_preview.effective_message
+        ):
+            user_id = (
+                update_preview.effective_user.id
+                if update_preview.effective_user
+                else None
+            )
+            lang = "ru"
+            if user_id:
+                user = await db_ops.get_user(db_session, user_id)
+                if user:
+                    lang = user.language
+            await bot.send_message(
+                update_preview.effective_chat.id, get_text(lang, "generic_processing")
+            )
+
+        asyncio.create_task(process_update(update_data))
 
     except ClientDisconnect:
-        logger.warning("Клиент (Telegram) отключился до того, как мы успели прочитать запрос. Игнорируем.")
+        logger.warning(
+            "Клиент (Telegram) отключился до того, как мы успели прочитать запрос. Игнорируем."
+        )
     except json.JSONDecodeError:
         logger.warning("Получен запрос с невалидным JSON. Игнорируем.")
     except Exception as e:
         logger.error(f"Неизвестная ошибка при обработке вебхука: {e}", exc_info=True)
-    
+
     return Response(status_code=200)
 
 
