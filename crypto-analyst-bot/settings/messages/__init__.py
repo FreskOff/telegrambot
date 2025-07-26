@@ -10,7 +10,11 @@ def _load_messages():
     if messages:
         return messages
 
-    base = pathlib.Path(__file__).with_suffix("")
+    # Load JSON message files stored in the same directory as this module.
+    # Using ``Path(__file__).parent`` ensures we correctly reference the
+    # directory containing the locale files rather than a non-existent
+    # ``__init__`` path without the ``.py`` extension.
+    base = pathlib.Path(__file__).resolve().parent
     for fp in base.glob("*.json"):
         try:
             with fp.open(encoding="utf-8") as f:
