@@ -72,6 +72,7 @@ async def get_or_create_user(session: AsyncSession, tg_user: TelegramUser) -> Us
             last_name=tg_user.last_name,
             last_activity_at=datetime.utcnow(),
             last_contact_at=datetime.utcnow(),
+            show_recommendations=True,
         )
         session.add(new_user)
         try:
