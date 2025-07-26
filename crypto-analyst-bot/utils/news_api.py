@@ -28,7 +28,7 @@ async def _fetch_cryptopanic(symbol: str, limit: int = 5) -> List[Dict]:
     cached = await get_cache(cache_key)
     if cached:
         return json.loads(cached)
-    url = "https://cryptopanic.com/api/v1/posts/"
+    url = "https://cryptopanic.com/api/developer/v2/posts/"
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(url, params=params, follow_redirects=True)
