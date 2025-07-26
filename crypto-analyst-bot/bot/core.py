@@ -777,18 +777,28 @@ async def handle_portfolio_summary(update: Update, context: CallbackContext, pay
         if not portfolio:
             response = get_text(lang, 'portfolio_empty')
         else:
-            await update.effective_message.reply_text(get_text(lang, 'portfolio_chart_start'))
-            for coin in portfolio:
-                chart_path = await create_price_chart(coin.coin_symbol)
-                if chart_path:
-                    with open(chart_path, "rb") as img:
+            await update.effective_message.reply_text(
+                get_text(lang, 'portfolio_chart_start')
+            )
+
+            tasks = [create_price_chart(c.coin_symbol) for c in portfolio]
+            chart_paths = await asyncio.gather(*tasks)
+
+            for path in chart_paths:
+                if not path:
+                    continue
+                try:
+                    with open(path, "rb") as img:
                         await context.bot.send_photo(
-                            chat_id=update.effective_chat.id, photo=img
+                            chat_id=update.effective_chat.id,
+                            photo=img,
                         )
+                finally:
                     try:
-                        os.remove(chart_path)
+                        os.remove(path)
                     except OSError:
                         pass
+
             response = get_text(lang, 'portfolio_chart_sent')
 
     else:

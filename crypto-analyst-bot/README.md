@@ -16,3 +16,11 @@ following environment variables:
 - `CRYPTOPANIC_API_KEY` – access to CryptoPanic news
 - `COINMARKETCAP_API_KEY` – required for CoinMarketCap endpoints and sent
   as `X-CMC_PRO_API_KEY` header
+
+## Usage limits and settings
+
+Free users can send up to 20 messages per day. After reaching the limit the bot
+will suggest subscribing or waiting until the next day.
+
+Recommendation hints can be toggled with `/hints on` or `/hints off`. The same
+option is available via `/settings recommendations <on|off>`.
