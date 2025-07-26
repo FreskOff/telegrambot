@@ -4,7 +4,7 @@
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from telegram import (
     Update,
     constants,
@@ -55,9 +55,30 @@ router = IntentRouter()
 # Стоимость подписки в звёздах и описание платежа
 SUBSCRIPTION_PRICE = int(os.getenv("SUBSCRIPTION_PRICE", "20"))
 SUBSCRIPTION_DESC = os.getenv("SUBSCRIPTION_DESC", "Channel subscription")
+PAYMENT_PROVIDER_TOKEN = os.getenv(
+    "PAYMENT_PROVIDER_TOKEN",
+    "8481751460:AAHeRPdfg0e2Ri_w30dJfpHRtGqHvBAUZuM",
+)
 # Показывать подсказку по популярным темам не чаще, чем раз в N сообщений
 TOP_TOPICS_HINT_LIMIT = 10
 TOP_TOPICS_HINT_COOLDOWN = 24 * 60 * 60  # 24 часа
+
+async def send_subscription_invoice(
+    update: Update,
+    context: CallbackContext,
+    amount: int = SUBSCRIPTION_PRICE,
+) -> None:
+    """Отправляет пользователю счёт через Telegram Payments."""
+    chat_id = update.effective_message.chat_id
+    await context.bot.send_invoice(
+        chat_id=chat_id,
+        title="Премиум-подписка",
+        description="Доступ к эксклюзивным материалам",
+        payload="premium-subscription-monthly",
+        provider_token=PAYMENT_PROVIDER_TOKEN,
+        currency="RUB",
+        prices=[LabeledPrice("Подписка на 1 месяц", amount)],
+    )
 
 
 async def send_stars_payment_request(update: Update, context: CallbackContext, amount: int = SUBSCRIPTION_PRICE) -> None:
@@ -524,13 +545,13 @@ async def broadcast_command(update: Update, context: CallbackContext, payload: s
 
 
 async def handle_subscribe(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
-    """Открывает форму оплаты подписки через Telegram Stars."""
+    """Открывает форму оплаты подписки через Telegram Payments."""
     lang = context.user_data.get('lang', 'ru')
     level = 'premium' if 'premium' in payload.lower() else 'basic'
     await db_ops.create_or_update_subscription(db_session, update.effective_user.id, is_active=False, level=level)
 
     try:
-        await send_stars_payment_request(update, context, SUBSCRIPTION_PRICE)
+        await send_subscription_invoice(update, context, SUBSCRIPTION_PRICE)
         await update.effective_message.reply_text(
             get_text(lang, 'subscribe_info'),
             parse_mode=constants.ParseMode.MARKDOWN,
@@ -612,6 +633,47 @@ async def handle_stars_payment(update: Update, context: CallbackContext, db_sess
                     logger.error(f'Delivery failed for {user_id}: {e}')
     except Exception as e:
         logger.error(f'Failed to update subscription for {user_id}: {e}')
+
+async def handle_invoice_payment(update: Update, context: CallbackContext, db_session: AsyncSession):
+    """Обновляет подписку после оплаты через Telegram Payments."""
+    user_id = update.effective_user.id
+    try:
+        next_payment = datetime.utcnow() + timedelta(days=30)
+        payload = ''
+        if update.effective_message.successful_payment:
+            payload = update.effective_message.successful_payment.invoice_payload or ''
+        level = 'premium' if 'premium' in payload else 'basic'
+        await db_ops.create_or_update_subscription(
+            db_session,
+            user_id,
+            is_active=True,
+            next_payment=next_payment,
+            level=level,
+        )
+        schedule_subscription_reminder(user_id, next_payment)
+        await db_ops.add_chat_message(
+            session=db_session,
+            user_id=user_id,
+            role='system',
+            text='subscription update',
+            event='subscription',
+        )
+        channel_id = os.getenv('PRIVATE_CHANNEL_ID')
+        if channel_id:
+            try:
+                await context.bot.unban_chat_member(channel_id, user_id)
+                invite = await context.bot.export_chat_invite_link(channel_id)
+                lang = context.user_data.get('lang', 'ru')
+                msg = get_text(lang, 'subscription_access_granted', link=invite)
+                await context.bot.send_message(
+                    user_id,
+                    msg,
+                    parse_mode=constants.ParseMode.MARKDOWN,
+                )
+            except Exception as e:
+                logger.error(f'Failed to grant channel access for {user_id}: {e}')
+    except Exception as e:
+        logger.error(f'Failed to process payment for {user_id}: {e}')
 async def handle_track_coin(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     lang = context.user_data.get('lang', 'ru')
     if not payload or not is_valid_symbol(payload):
@@ -748,7 +810,10 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
     if not user or not message or user.is_bot or user.id == getattr(context.bot, 'id', None):
         return
 
-    if getattr(message, 'successful_payment', None) or getattr(message, 'stars', None):
+    if getattr(message, 'successful_payment', None):
+        await handle_invoice_payment(update, context, db_session)
+        return
+    if getattr(message, 'stars', None):
         await handle_stars_payment(update, context, db_session)
         return
 
