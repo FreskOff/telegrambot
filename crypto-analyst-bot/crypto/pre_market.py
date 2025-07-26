@@ -7,6 +7,7 @@ import os
 import logging
 from typing import List, Dict, Optional
 import asyncio
+import json
 from dotenv import load_dotenv
 import httpx
 from bs4 import BeautifulSoup
