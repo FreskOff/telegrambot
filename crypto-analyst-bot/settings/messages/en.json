@@ -50,6 +50,7 @@
   "settings_prompt": "Choose an option: language, timezone, currency or recommendations.",
   "alert_triggered": "🔔 *Alert triggered!* 🔔\n\nPrice of *{symbol}* has {direction_text} your target!\n\n🏆 Target: *${target_price}*\n📈 Current price: *${current_price}*",
   "analysis_premium_start": "⏳ Generating extended report. This may take up to a minute...",
+  "analysis_processing": "⏳ Analysis in progress, please wait...",
   "analysis_premium_insufficient": "❌ Not enough stars. {price}⭐ required for the full report",
   "analysis_premium_done": "📄 Extended report is ready.",
   "shop_header": "🛍 Available goods:",
