@@ -5,7 +5,7 @@ import logging
 import os
 import re
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from telegram import (
     Update,
     constants,
@@ -86,6 +86,12 @@ async def send_payment_invoice(
     """Отправляет счёт на оплату через Telegram Payments."""
     chat_id = update.effective_message.chat_id
     payload = f"{product_type}-{chat_id}"
+    if not PAYMENT_PROVIDER_TOKEN:
+        logger.error("PAYMENT_PROVIDER_TOKEN not set")
+        lang = context.user_data.get('lang', 'ru')
+        msg_key = 'subscription_link_missing' if product_type == 'subscription' else 'purchase_error'
+        await update.effective_message.reply_text(get_text(lang, msg_key))
+        return
     await context.bot.send_invoice(
         chat_id=chat_id,
         title=description,
@@ -643,7 +649,7 @@ async def handle_invoice_payment(update: Update, context: CallbackContext, db_se
             payload = update.effective_message.successful_payment.invoice_payload or ''
 
         if 'subscription' in payload:
-            next_payment = datetime.now(datetime.UTC) + timedelta(days=30)
+            next_payment = datetime.now(timezone.utc) + timedelta(days=30)
             level = 'premium' if 'premium' in payload else 'basic'
             await db_ops.create_or_update_subscription(
                 db_session,
@@ -797,7 +803,7 @@ async def handle_portfolio_summary(update: Update, context: CallbackContext, pay
             for profit, coin, price in data:
                 pct = ((price - (coin.buy_price or 0)) / (coin.buy_price or 1)) * 100 if coin.buy_price else 0
                 days = (
-                    f" | { (datetime.now(datetime.UTC) - coin.purchase_date).days }d" if coin.purchase_date else ""
+                    f" | { (datetime.now(timezone.utc) - coin.purchase_date).days }d" if coin.purchase_date else ""
                 )
                 lines.append(
                     f"• *{coin.coin_symbol}*: {coin.quantity:g} шт. | текущая цена ${price:,.2f} | P/L ${profit:,.2f} ({pct:+.2f}%)" + days
@@ -920,7 +926,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         await handle_unsupported_request(update, context, '', db_session)
         return
 
-    start_ts = datetime.now(datetime.UTC)
+    start_ts = datetime.now(timezone.utc)
     try:
         await context.bot.send_chat_action(chat_id=message.chat_id, action=constants.ChatAction.TYPING)
         
@@ -931,7 +937,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
             await db_ops.update_dialog(db_session, dialog.id, topic=intent)
         top_topics = await db_ops.get_top_user_topics(db_session, user.id)
         hint_state = context.user_data.get('top_topics_hint', {})
-        now_ts = datetime.now(datetime.UTC).timestamp()
+        now_ts = datetime.now(timezone.utc).timestamp()
         last_ts = hint_state.get('last_shown')
         allow_hint = (
             last_ts is None
@@ -966,7 +972,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
 
         handler = router.get(intent) or handle_unsupported_request
         await handler(update, context, payload, db_session)
-        duration = int((datetime.now(datetime.UTC) - start_ts).total_seconds() * 1000)
+        duration = int((datetime.now(timezone.utc) - start_ts).total_seconds() * 1000)
         await db_ops.update_chat_message(db_session, user_msg.id, duration_ms=duration)
 
     except Exception as e:
@@ -976,7 +982,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         )
         lang = context.user_data.get('lang', 'ru')
         await message.reply_text(get_text(lang, 'error_generic'))
-        duration = int((datetime.now(datetime.UTC) - start_ts).total_seconds() * 1000)
+        duration = int((datetime.now(timezone.utc) - start_ts).total_seconds() * 1000)
         await db_ops.update_chat_message(db_session, user_msg.id, duration_ms=duration, error=True)
 
 # --- Регистрация обработчиков намерений ---

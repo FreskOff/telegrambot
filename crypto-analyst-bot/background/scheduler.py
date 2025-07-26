@@ -15,7 +15,7 @@ from settings.messages import get_text
 from utils.api_clients import coingecko_client
 from crypto.handler import COIN_ID_MAP
 from crypto.pre_market import get_premarket_signals
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from analysis.metrics import gather_metrics
 from ai.prediction import update_prediction_cache
 
@@ -256,7 +256,7 @@ def schedule_subscription_reminder(user_id: int, next_payment: datetime):
     if not next_payment:
         return
     remind_at = next_payment - timedelta(days=3)
-    if remind_at <= datetime.now(datetime.UTC):
+    if remind_at <= datetime.now(timezone.utc):
         return
     job_id = f"reminder_{user_id}"
     scheduler.add_job(

@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import operations as db_ops
@@ -23,7 +23,7 @@ async def generate_recommendations(session: AsyncSession, user_id: int) -> list[
 
     subscription = await db_ops.get_subscription(session, user_id)
     if subscription and subscription.is_active and subscription.next_payment:
-        days_left = (subscription.next_payment - datetime.now(datetime.UTC)).days
+        days_left = (subscription.next_payment - datetime.now(timezone.utc)).days
         if days_left <= 5:
             recs.append(("renew", subscription.next_payment.strftime("%Y-%m-%d")))
     elif usage.get("message_count", 0) >= 20:
