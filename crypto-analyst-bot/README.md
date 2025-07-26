@@ -10,8 +10,9 @@ See [COMMANDS.md](COMMANDS.md) for the full list of available commands.
 
 ## API keys
 
-Several features rely on external APIs. Create a `.env` file or set the
-following environment variables:
+Several features rely on external APIs and bot configuration provided via
+environment variables. Copy `.env.example` to `.env` and fill in the values for
+your deployment. The most important variables are:
 
 - `CRYPTOPANIC_API_KEY` – access to CryptoPanic news
 - `COINMARKETCAP_API_KEY` – required for CoinMarketCap endpoints and sent
