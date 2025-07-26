@@ -55,6 +55,8 @@ router = IntentRouter()
 # Стоимость подписки в звёздах и описание платежа
 SUBSCRIPTION_PRICE = int(os.getenv("SUBSCRIPTION_PRICE", "20"))
 SUBSCRIPTION_DESC = os.getenv("SUBSCRIPTION_DESC", "Channel subscription")
+# Показывать подсказку по популярным темам не чаще, чем раз в N сообщений
+TOP_TOPICS_HINT_INTERVAL = 5
 
 
 async def send_stars_payment_request(update: Update, context: CallbackContext, amount: int = SUBSCRIPTION_PRICE) -> None:
@@ -775,6 +777,14 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         dialog_id=dialog.id,
     )
 
+    # Считаем сообщения для подсказки по популярным темам
+    hint_state = context.user_data.get('top_topics_hint', {})
+    if hint_state.get('dialog_id') != dialog.id:
+        hint_state = {'dialog_id': dialog.id, 'counter': 0, 'shown': False}
+    else:
+        hint_state['counter'] = hint_state.get('counter', 0) + 1
+    context.user_data['top_topics_hint'] = hint_state
+
     # --- Обработка встроенных команд БЕЗ AI ---
     hardcoded_commands = {
         '/start': handle_bot_help,
@@ -816,12 +826,18 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         if not dialog.topic:
             await db_ops.update_dialog(db_session, dialog.id, topic=intent)
         top_topics = await db_ops.get_top_user_topics(db_session, user.id)
-        if top_topics:
+        hint_state = context.user_data.get('top_topics_hint', {})
+        if top_topics and (
+            not hint_state.get('shown') or hint_state.get('counter', 0) >= TOP_TOPICS_HINT_INTERVAL
+        ):
             hint = get_text(lang, 'top_topics_hint', topics=", ".join(top_topics))
             kb = InlineKeyboardMarkup(
                 [[InlineKeyboardButton(get_text(lang, 'full_report_btn'), callback_data='buy_report')]]
             )
             await message.reply_text(hint, reply_markup=kb)
+            hint_state['shown'] = True
+            hint_state['counter'] = 0
+            context.user_data['top_topics_hint'] = hint_state
 
         # Шаг 2: Извлечение данных
         entities = await extract_entities(intent, user_input)
