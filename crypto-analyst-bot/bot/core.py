@@ -32,6 +32,7 @@ from settings.user import (
     handle_manage_alerts,
     handle_change_language,
     handle_settings_command,
+    handle_hints_command,
     MAX_FREE_PORTFOLIO_COINS,
     DAILY_FREE_MESSAGES,
 )
@@ -903,6 +904,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         '/subscribe': handle_subscribe,
         '/course': handle_course_command,
         '/feedback': handle_feedback,
+        '/hints': handle_hints_command,
         '/recommend': handle_recommend,
         '/admin': handle_admin_command,
         '/my_subscription': handle_my_subscription,

@@ -170,3 +170,24 @@ async def handle_settings_command(update: Update, context: CallbackContext, payl
 
     await update.effective_message.reply_text(text)
     await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=text)
+
+
+async def handle_hints_command(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
+    """Toggle recommendation hints on or off."""
+    if not update.effective_message:
+        return
+    user_id = update.effective_user.id
+    lang = context.user_data.get('lang', 'ru')
+
+    value = payload.strip().lower()
+    if value:
+        enabled = value not in ('off', '0', 'false')
+        await db_ops.update_user_settings(db_session, user_id, show_recommendations=enabled)
+        context.user_data['recommendations_enabled'] = enabled
+    else:
+        user = await db_ops.get_user(db_session, user_id)
+        enabled = getattr(user, 'show_recommendations', True)
+
+    text = get_text(lang, 'recommendations_on' if enabled else 'recommendations_off')
+    await update.effective_message.reply_text(text)
+    await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=text)
