@@ -61,10 +61,10 @@ def _load_update_data(raw_body: bytes) -> dict:
         return json.loads(text)
     except json.JSONDecodeError as e:
         cleaned = text.rstrip()
-        # Remove trailing commas at end of string
-        cleaned = re.sub(r",\s*$", "", cleaned)
-        # Remove commas immediately before closing brackets/braces
+        # Remove trailing commas anywhere before a closing bracket/brace
         cleaned = re.sub(r",\s*(?=[}\]])", "", cleaned)
+        # Remove any trailing comma at the very end of the string
+        cleaned = re.sub(r",\s*$", "", cleaned)
         if cleaned != text:
             try:
                 return json.loads(cleaned)
