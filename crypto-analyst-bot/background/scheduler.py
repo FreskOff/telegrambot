@@ -90,7 +90,12 @@ async def check_price_alerts():
                         send_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
                         params = {'chat_id': alert.user_id, 'text': message, 'parse_mode': 'Markdown'}
                         async with httpx.AsyncClient() as client:
-                            await client.post(send_url, params=params)
+                            response = await client.post(send_url, params=params)
+                            if response.status_code != 200:
+                                logger.error(
+                                    f"Telegram API error {response.status_code} when sending alert {alert.id}: {response.text}"
+                                )
+                                response.raise_for_status()
                         
                         await db_ops.deactivate_alert(session, alert.id)
                     except Exception as e:
@@ -142,7 +147,12 @@ async def check_subscriptions():
                                 send_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
                                 params = {"chat_id": sub.user_id, "text": msg, "parse_mode": "Markdown"}
                                 async with httpx.AsyncClient() as client:
-                                    await client.post(send_url, params=params)
+                                    response = await client.post(send_url, params=params)
+                                    if response.status_code != 200:
+                                        logger.error(
+                                            f"Telegram API error {response.status_code} when granting access to {sub.user_id}: {response.text}"
+                                        )
+                                        response.raise_for_status()
                             except Exception as e:
                                 logger.error(f"Error granting channel access for {sub.user_id}: {e}")
                         else:
@@ -156,7 +166,12 @@ async def check_subscriptions():
                             send_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
                             params = {"chat_id": sub.user_id, "text": msg}
                             async with httpx.AsyncClient() as client:
-                                await client.post(send_url, params=params)
+                                response = await client.post(send_url, params=params)
+                                if response.status_code != 200:
+                                    logger.error(
+                                        f"Telegram API error {response.status_code} when sending reminder to {sub.user_id}: {response.text}"
+                                    )
+                                    response.raise_for_status()
                 except Exception as e:
                     logger.error(f"Ошибка проверки подписки для {sub.user_id}: {e}")
         except Exception as e:
@@ -199,7 +214,12 @@ async def send_premarket_digest():
                 send_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
                 params = {"chat_id": sub.user_id, "text": msg, "parse_mode": "Markdown"}
                 async with httpx.AsyncClient() as client:
-                    await client.post(send_url, params=params)
+                    response = await client.post(send_url, params=params)
+                    if response.status_code != 200:
+                        logger.error(
+                            f"Telegram API error {response.status_code} when sending premarket digest to {sub.user_id}: {response.text}"
+                        )
+                        response.raise_for_status()
         except Exception as e:
             logger.error(f"Критическая ошибка в задаче send_premarket_digest: {e}", exc_info=True)
 
@@ -230,7 +250,12 @@ async def send_admin_report():
             send_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
             params = {"chat_id": admin_id, "text": msg}
             async with httpx.AsyncClient() as client:
-                await client.post(send_url, params=params)
+                response = await client.post(send_url, params=params)
+                if response.status_code != 200:
+                    logger.error(
+                        f"Telegram API error {response.status_code} when sending admin report: {response.text}"
+                    )
+                    response.raise_for_status()
         except Exception as e:
             logger.error(f"Ошибка в задаче send_admin_report: {e}")
 
@@ -248,7 +273,12 @@ async def send_subscription_reminder(user_id: int):
         send_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         params = {"chat_id": user_id, "text": msg}
         async with httpx.AsyncClient() as client:
-            await client.post(send_url, params=params)
+            response = await client.post(send_url, params=params)
+            if response.status_code != 200:
+                logger.error(
+                    f"Telegram API error {response.status_code} when sending subscription reminder to {user_id}: {response.text}"
+                )
+                response.raise_for_status()
 
 
 def schedule_subscription_reminder(user_id: int, next_payment: datetime):
