@@ -335,6 +335,9 @@ async def handle_buy_product(update: Update, context: CallbackContext, payload: 
 
 async def handle_buy_report(update: Update, context: CallbackContext, db_session: AsyncSession):
     """Initiate purchase of an extended report via Telegram Stars."""
+    # always answer callback to avoid Telegram timeout errors
+    if getattr(update, "callback_query", None):
+        await update.callback_query.answer()
     lang = context.user_data.get('lang', 'ru')
     try:
         await send_payment_invoice(update, context, 'report', 100, 'Расширенный отчет')

@@ -204,6 +204,7 @@ def test_buy_report_invoice(monkeypatch):
         messages.append(text)
     update = types.SimpleNamespace(
         effective_message=types.SimpleNamespace(reply_text=reply),
+        callback_query=None,
         effective_user=types.SimpleNamespace(id=11),
     )
     context = types.SimpleNamespace(bot=types.SimpleNamespace(id=1), user_data={})
@@ -211,3 +212,24 @@ def test_buy_report_invoice(monkeypatch):
     asyncio.run(core.handle_buy_report(update, context, db_session=None))
     assert calls['payload'] == 'report'
     assert messages[-1] == 'purchase_open_form'
+
+
+def test_buy_report_answers_callback(monkeypatch):
+    answered = {}
+    async def ans(*a, **k):
+        answered['ok'] = True
+
+    async def fake_invoice(*a, **k):
+        pass
+    monkeypatch.setattr(core, 'send_payment_invoice', fake_invoice)
+    async def reply(*a, **k):
+        pass
+    update = types.SimpleNamespace(
+        callback_query=types.SimpleNamespace(answer=ans),
+        effective_message=types.SimpleNamespace(reply_text=reply),
+        effective_user=types.SimpleNamespace(id=12),
+    )
+    context = types.SimpleNamespace(bot=types.SimpleNamespace(id=1), user_data={})
+    monkeypatch.setattr(core, 'get_text', lambda *a, **k: 'purchase_open_form')
+    asyncio.run(core.handle_buy_report(update, context, db_session=None))
+    assert answered.get('ok')
