@@ -22,6 +22,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Silence verbose logs from the httpx library to avoid leaking sensitive
+# information such as the bot token in request URLs.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 # --- Загрузка переменных окружения ---
 load_dotenv()
 
