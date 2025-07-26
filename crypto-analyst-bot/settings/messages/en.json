@@ -88,6 +88,7 @@
   "feedback_thanks": "✅ Thank you for your feedback! It was sent to the admin.",
   "alert_limit": "⚠️ Free plan allows only {limit} alerts. Consider subscribing for more.",
   "portfolio_limit": "⚠️ Free plan allows only {limit} coins in your portfolio.",
+  "free_daily_limit": "⚠️ Daily free request limit reached ({limit}). Please subscribe or try tomorrow.",
   "recommend_header": "🤖 *Personal recommendations:*",
   "recommend_none": "No new recommendations.",
   "recommend_subscription": "You use the bot a lot. Consider subscribing to premium.",

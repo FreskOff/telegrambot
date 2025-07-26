@@ -413,6 +413,21 @@ async def get_chat_history(session: AsyncSession, user_id: int, limit: int = 10)
     result = await session.execute(select(ChatHistory).filter(ChatHistory.user_id == user_id).order_by(desc(ChatHistory.timestamp)).limit(limit))
     return list(reversed(result.scalars().all()))
 
+
+async def count_user_messages_today(session: AsyncSession, user_id: int) -> int:
+    """Возвращает количество сообщений пользователя за сегодняшний день."""
+    start_of_day = datetime.now(datetime.UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    result = await session.execute(
+        select(func.count())
+        .select_from(ChatHistory)
+        .filter(
+            ChatHistory.user_id == user_id,
+            ChatHistory.role == "user",
+            ChatHistory.timestamp >= start_of_day,
+        )
+    )
+    return result.scalar_one() or 0
+
 # --- Отзывы ---
 async def add_feedback(session: AsyncSession, user_id: int, text: str) -> ChatHistory:
     """Сохраняет отзыв пользователя."""

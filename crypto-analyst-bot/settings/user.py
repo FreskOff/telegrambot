@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 # Limits for free users
 MAX_FREE_ALERTS = 2
 MAX_FREE_PORTFOLIO_COINS = 5
+DAILY_FREE_MESSAGES = 20
 
 async def handle_setup_alert(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     """
