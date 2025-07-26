@@ -94,7 +94,10 @@ async def startup_event():
         webhook_url_path = f"/webhook/{TELEGRAM_BOT_TOKEN}"
         full_webhook_url = f"{WEBHOOK_URL.rstrip('/')}{webhook_url_path}"
 
-        logger.info(f"Установка вебхука на URL: {full_webhook_url}")
+        masked_token = TELEGRAM_BOT_TOKEN[:4] + "..." + TELEGRAM_BOT_TOKEN[-4:]
+        masked_url = f"{WEBHOOK_URL.rstrip('/')}/webhook/{masked_token}"
+
+        logger.info(f"Установка вебхука на URL: {masked_url}")
         success = await bot.set_webhook(
             url=full_webhook_url,
             allowed_updates=Update.ALL_TYPES,
