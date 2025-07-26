@@ -199,8 +199,16 @@ async def telegram_webhook(
         return Response(status_code=403)
 
     try:
-        raw_body = await request.body()
-        update_data = _load_update_data(raw_body)
+        raw_body = None
+        if hasattr(request, "json"):
+            try:
+                update_data = await request.json()
+            except json.JSONDecodeError:
+                raw_body = await request.body()
+                update_data = _load_update_data(raw_body)
+        else:
+            raw_body = await request.body()
+            update_data = _load_update_data(raw_body)
 
         update_preview = Update.de_json(update_data, bot)
         if (
@@ -229,6 +237,8 @@ async def telegram_webhook(
             "Клиент (Telegram) отключился до того, как мы успели прочитать запрос. Игнорируем."
         )
     except json.JSONDecodeError as e:
+        if raw_body is None:
+            raw_body = await request.body()
         logger.warning(
             "Получен запрос с невалидным JSON: %r, длина=%d, ошибка=%s",
             raw_body,
