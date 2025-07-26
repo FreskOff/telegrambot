@@ -100,15 +100,22 @@ async def send_payment_invoice(
         msg_key = 'subscription_link_missing' if product_type == 'subscription' else 'purchase_error'
         await update.effective_message.reply_text(get_text(lang, msg_key))
         return
-    await context.bot.send_invoice(
-        chat_id=chat_id,
-        title=description,
-        description=description,
-        payload=payload,
-        provider_token=PAYMENT_PROVIDER_TOKEN,
-        currency="RUB",
-        prices=[LabeledPrice(description, amount)],
-    )
+
+    try:
+        await context.bot.send_invoice(
+            chat_id=chat_id,
+            title=description,
+            description=description,
+            payload=payload,
+            provider_token=PAYMENT_PROVIDER_TOKEN,
+            currency="RUB",
+            prices=[LabeledPrice(description, amount)],
+        )
+    except Exception as e:
+        logger.error(f"Failed to send invoice: {e}")
+        lang = context.user_data.get('lang', 'ru')
+        msg_key = 'subscription_link_missing' if product_type == 'subscription' else 'purchase_error'
+        await update.effective_message.reply_text(get_text(lang, msg_key))
 
 # Main menu keyboard
 def build_main_menu(lang: str) -> ReplyKeyboardMarkup:
@@ -385,13 +392,18 @@ async def handle_course_command(update: Update, context: CallbackContext, payloa
             await update.effective_message.reply_text(get_text(lang, 'course_already_owned'))
         else:
             if course.stars_price > 0:
-                await send_payment_invoice(
-                    update,
-                    context,
-                    f"course-{course_id}",
-                    course.stars_price,
-                    course.title,
-                )
+                try:
+                    await send_payment_invoice(
+                        update,
+                        context,
+                        f"course-{course_id}",
+                        course.stars_price,
+                        course.title,
+                    )
+                except Exception as e:
+                    logger.error(f"Course payment failed for {update.effective_user.id}: {e}")
+                    await update.effective_message.reply_text(get_text(lang, 'purchase_error'))
+                    return
             await db_ops.add_course_purchase(db_session, update.effective_user.id, course_id)
             await db_ops.add_chat_message(
                 session=db_session,
@@ -400,7 +412,10 @@ async def handle_course_command(update: Update, context: CallbackContext, payloa
                 text=f'course purchase {course.title}',
                 event='purchase'
             )
-            await update.effective_message.reply_text(get_text(lang, 'course_purchased', title=course.title), parse_mode=constants.ParseMode.MARKDOWN)
+            await update.effective_message.reply_text(
+                get_text(lang, 'course_purchased', title=course.title),
+                parse_mode=constants.ParseMode.MARKDOWN,
+            )
 
         if course.content_type == 'text' and course.file_id:
             await update.effective_message.reply_text(course.file_id)
