@@ -75,12 +75,13 @@ async def send_subscription_invoice(
     amount: int = SUBSCRIPTION_PRICE,
 ) -> None:
     """Отправляет пользователю счёт через Telegram Payments."""
+    lang = context.user_data.get('lang', 'ru')
     await send_payment_invoice(
         update,
         context,
         "subscription",
         amount,
-        "Премиум-подписка",
+        get_text(lang, 'premium_subscription_title'),
     )
 
 async def send_payment_invoice(
@@ -98,7 +99,7 @@ async def send_payment_invoice(
         await context.bot.send_invoice(
             chat_id=chat_id,
             title=description,
-            description="Оплата цифрового продукта",
+            description=get_text(context.user_data.get('lang', 'ru'), 'digital_product_payment'),
             payload=payload,
             provider_token="",
             currency="XTR",
@@ -335,7 +336,13 @@ async def handle_buy_report(update: Update, context: CallbackContext, db_session
         await update.callback_query.answer()
     lang = context.user_data.get('lang', 'ru')
     try:
-        await send_payment_invoice(update, context, 'report', 100, 'Расширенный отчет')
+        await send_payment_invoice(
+            update,
+            context,
+            'report',
+            100,
+            get_text(lang, 'extended_report_title'),
+        )
         await update.effective_message.reply_text(
             get_text(lang, 'purchase_open_form')
         )
