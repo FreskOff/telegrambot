@@ -57,7 +57,6 @@ SUBSCRIPTION_PRICE = int(os.getenv("SUBSCRIPTION_PRICE", "20"))
 SUBSCRIPTION_DESC = os.getenv("SUBSCRIPTION_DESC", "Channel subscription")
 PAYMENT_PROVIDER_TOKEN = os.getenv(
     "PAYMENT_PROVIDER_TOKEN",
-    "8481751460:AAHeRPdfg0e2Ri_w30dJfpHRtGqHvBAUZuM",
 )
 # Показывать подсказку по популярным темам не чаще, чем раз в N сообщений
 TOP_TOPICS_HINT_LIMIT = 10
