@@ -63,6 +63,13 @@ PAYMENT_PROVIDER_TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN")
 TOP_TOPICS_HINT_LIMIT = 10
 TOP_TOPICS_HINT_COOLDOWN = 24 * 60 * 60  # 24 часа
 
+async def safe_update_message(session: AsyncSession, msg_id: int, **kwargs) -> None:
+    """Safely updates a chat message in the background."""
+    try:
+        await db_ops.update_chat_message(session, msg_id, **kwargs)
+    except Exception as e:
+        logger.error(f"Failed to update chat message {msg_id}: {e}")
+
 async def send_subscription_invoice(
     update: Update,
     context: CallbackContext,
@@ -1005,7 +1012,14 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         lang = context.user_data.get('lang', 'ru')
         await message.reply_text(get_text(lang, 'error_generic'))
         duration = int((datetime.now(timezone.utc) - start_ts).total_seconds() * 1000)
-        await db_ops.update_chat_message(db_session, user_msg.id, duration_ms=duration, error=True)
+        asyncio.create_task(
+            safe_update_message(
+                db_session,
+                user_msg.id,
+                duration_ms=duration,
+                error=True,
+            )
+        )
 
 # --- Регистрация обработчиков намерений ---
 router.register("GENERAL_CHAT", handle_general_ai_conversation)
