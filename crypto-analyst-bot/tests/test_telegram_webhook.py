@@ -244,9 +244,9 @@ def test_telegram_webhook_double_comma(monkeypatch):
         "effective_chat": {"id": 1},
         "effective_user": {"id": 2},
     }
-    # introduce a double comma inside JSON
+    # introduce a true double comma inside JSON
     text = json.dumps(update)
-    broken = text.replace('"hi"', '"hi",')
+    broken = text.replace('"hi"', '"hi",,')
     req = _make_request(broken.encode("utf-8"))
 
     called = {}
