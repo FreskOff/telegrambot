@@ -717,15 +717,25 @@ async def inactive_users_count(session: AsyncSession, days: int = 30) -> int:
 async def add_news_articles(session: AsyncSession, symbol: str, articles: List[dict]):
     """Сохраняет новости, избегая дубликатов по URL."""
     for art in articles:
-        result = await session.execute(select(NewsArticle).filter(NewsArticle.url == art.get("url")))
+        result = await session.execute(
+            select(NewsArticle).filter(NewsArticle.url == art.get("url"))
+        )
         if result.scalar_one_or_none():
             continue
+        published = art.get("published_at")
+        if isinstance(published, str) and published:
+            try:
+                published_dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
+            except Exception:
+                published_dt = None
+        else:
+            published_dt = published
         article = NewsArticle(
             symbol=symbol.upper(),
             title=art.get("title"),
             url=art.get("url"),
             source=art.get("source"),
-            published_at=art.get("published_at"),
+            published_at=published_dt,
         )
         session.add(article)
     await safe_commit(session)
