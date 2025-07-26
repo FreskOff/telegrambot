@@ -568,13 +568,23 @@ async def handle_subscribe(update: Update, context: CallbackContext, payload: st
         await update.effective_message.reply_text(get_text(lang, 'subscription_link_missing'))
 
 async def handle_stars_payment(update: Update, context: CallbackContext, db_session: AsyncSession):
-    """Обновляет статус подписки после оплаты звёздами."""
+    """Обновляет статус подписки после оплаты звёздами.
+
+    В некоторых регионах метод ``payments.getStarsStatus`` недоступен, поэтому
+    возможные ошибки при его вызове подавляются.
+    """
     user_id = update.effective_user.id
     try:
-        status = await context.bot._post(
-            'payments.getStarsStatus',
-            data={'user_id': user_id},
-        )
+        try:
+            status = await context.bot._post(
+                'payments.getStarsStatus',
+                data={'user_id': user_id},
+            )
+        except Exception as e:
+            logger.error(
+                f"payments.getStarsStatus failed for {user_id}: {e}",
+            )
+            status = {}
         active = bool(status.get('active')) if isinstance(status, dict) else False
         next_ts = status.get('next_payment_date') if isinstance(status, dict) else None
         next_payment = datetime.fromtimestamp(next_ts) if next_ts else None
