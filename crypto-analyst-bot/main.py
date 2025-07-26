@@ -170,7 +170,8 @@ async def telegram_webhook(
         return Response(status_code=403)
 
     try:
-        update_data = await request.json()
+        raw_body = await request.body()
+        update_data = json.loads(raw_body.decode("utf-8"))
 
         update_preview = Update.de_json(update_data, bot)
         if (
@@ -199,9 +200,9 @@ async def telegram_webhook(
             "Клиент (Telegram) отключился до того, как мы успели прочитать запрос. Игнорируем."
         )
     except json.JSONDecodeError:
-        logger.warning("Получен запрос с невалидным JSON. Игнорируем.")
+        logger.warning(f"Получен запрос с невалидным JSON: {raw_body!r}")
     except Exception as e:
-        logger.error(f"Неизвестная ошибка при обработке вебхука: {e}", exc_info=True)
+        logger.error(f"Ошибка при разборе обновления: {e!r}", exc_info=True)
 
     return Response(status_code=200)
 
