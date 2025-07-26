@@ -6,6 +6,7 @@ import os
 import json
 import logging
 import httpx
+import asyncio
 from dotenv import load_dotenv
 from typing import Dict, Tuple
 
@@ -87,6 +88,34 @@ EXTRACT_ENTITIES_PROMPT = """
 **Твой ответ (в формате `ключ:значение`):**
 """
 
+async def _classify_gemini(prompt: str) -> str | None:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            headers = {"Content-Type": "application/json"}
+            payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.0, "maxOutputTokens": 32}}
+            response = await client.post(GEMINI_API_URL, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip() or None
+    except Exception as e:
+        logger.warning(f"Gemini classify failed: {e}")
+        return None
+
+
+async def _classify_openai(prompt: str) -> str | None:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
+            payload = {"model": OPENAI_MODEL, "messages": [{"role": "user", "content": prompt}], "temperature": 0.0, "max_tokens": 32}
+            resp = await client.post(OPENAI_API_URL, json=payload, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("choices", [{}])[0].get("message", {}).get("content", "").strip() or None
+    except Exception as e:
+        logger.error(f"OpenAI classify failed: {e}")
+        return None
+
+
 async def classify_intent(user_input: str) -> str:
     """Шаг 1: Определяет только тип намерения."""
     prompt = CLASSIFY_INTENT_PROMPT.format(
@@ -94,70 +123,81 @@ async def classify_intent(user_input: str) -> str:
         INTENT_LIST_TEXT=INTENT_LIST_TEXT,
     )
 
+    tasks = []
     if GEMINI_API_KEY:
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                headers = {'Content-Type': 'application/json'}
-                payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.0, "maxOutputTokens": 32}}
-                response = await client.post(GEMINI_API_URL, json=payload, headers=headers)
-                response.raise_for_status()
-                data = response.json()
-                intent_text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "UNSUPPORTED_INTENT").strip()
-                if intent_text:
-                    return intent_text
-        except Exception as e:
-            logger.warning(f"Gemini classify failed: {e}")
-
+        tasks.append(asyncio.create_task(_classify_gemini(prompt)))
     if OPENAI_API_KEY:
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
-                payload = {"model": OPENAI_MODEL, "messages": [{"role": "user", "content": prompt}], "temperature": 0.0, "max_tokens": 32}
-                resp = await client.post(OPENAI_API_URL, json=payload, headers=headers)
-                resp.raise_for_status()
-                data = resp.json()
-                text = data.get("choices", [{}])[0].get("message", {}).get("content", "UNSUPPORTED_INTENT").strip()
-                return text if text else "UNSUPPORTED_INTENT"
-        except Exception as e:
-            logger.error(f"OpenAI classify failed: {e}")
+        tasks.append(asyncio.create_task(_classify_openai(prompt)))
+
+    if not tasks:
+        return "UNSUPPORTED_INTENT"
+
+    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    for p in pending:
+        p.cancel()
+    for d in done:
+        result = d.result()
+        if result:
+            return result
 
     return "UNSUPPORTED_INTENT"
+
+
+async def _extract_gemini(prompt: str) -> Dict[str, str] | None:
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            headers = {"Content-Type": "application/json"}
+            payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.0, "maxOutputTokens": 128}}
+            response = await client.post(GEMINI_API_URL, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "payload:").strip()
+            if ":" in text:
+                key, value = text.split(":", 1)
+                return {key.strip(): value.strip()}
+            return {"payload": text}
+    except Exception as e:
+        logger.warning(f"Gemini extract failed: {e}")
+        return None
+
+
+async def _extract_openai(prompt: str) -> Dict[str, str] | None:
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
+            payload = {"model": OPENAI_MODEL, "messages": [{"role": "user", "content": prompt}], "temperature": 0.0, "max_tokens": 128}
+            resp = await client.post(OPENAI_API_URL, json=payload, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            text = data.get("choices", [{}])[0].get("message", {}).get("content", "payload:").strip()
+            if ":" in text:
+                key, value = text.split(":", 1)
+                return {key.strip(): value.strip()}
+            return {"payload": text}
+    except Exception as e:
+        logger.error(f"OpenAI extract failed: {e}")
+        return None
 
 
 async def extract_entities(intent: str, user_input: str) -> Dict[str, str]:
     """Шаг 2: Извлекает данные для конкретного намерения."""
     prompt = EXTRACT_ENTITIES_PROMPT.format(intent=intent, user_input=user_input)
 
+    tasks = []
     if GEMINI_API_KEY:
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                headers = {'Content-Type': 'application/json'}
-                payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.0, "maxOutputTokens": 128}}
-                response = await client.post(GEMINI_API_URL, json=payload, headers=headers)
-                response.raise_for_status()
-                data = response.json()
-                response_text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "payload:").strip()
-                if ":" in response_text:
-                    key, value = response_text.split(":", 1)
-                    return {key.strip(): value.strip()}
-                return {"payload": ""}
-        except Exception as e:
-            logger.warning(f"Gemini extract failed: {e}")
-
+        tasks.append(asyncio.create_task(_extract_gemini(prompt)))
     if OPENAI_API_KEY:
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
-                payload = {"model": OPENAI_MODEL, "messages": [{"role": "user", "content": prompt}], "temperature": 0.0, "max_tokens": 128}
-                resp = await client.post(OPENAI_API_URL, json=payload, headers=headers)
-                resp.raise_for_status()
-                data = resp.json()
-                text = data.get("choices", [{}])[0].get("message", {}).get("content", "payload:").strip()
-                if ":" in text:
-                    key, value = text.split(":", 1)
-                    return {key.strip(): value.strip()}
-                return {"payload": text}
-        except Exception as e:
-            logger.error(f"OpenAI extract failed: {e}")
+        tasks.append(asyncio.create_task(_extract_openai(prompt)))
+
+    if not tasks:
+        return {"payload": "AI_SERVICE_UNCONFIGURED"}
+
+    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    for p in pending:
+        p.cancel()
+    for d in done:
+        result = d.result()
+        if result:
+            return result
 
     return {"payload": "AI_API_HTTP_ERROR"}

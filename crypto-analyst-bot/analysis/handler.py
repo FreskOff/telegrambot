@@ -5,6 +5,7 @@ import logging
 import json
 import os
 import httpx
+import asyncio
 import time
 import tempfile
 from datetime import datetime
@@ -18,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database import operations as db_ops
 from settings.messages import get_text
 from utils.api_clients import coingecko_client
+from database.engine import AsyncSessionFactory
 from utils import news_api
 from utils import google_search
 
@@ -206,53 +208,60 @@ async def handle_token_analysis(update: Update, context: CallbackContext, payloa
                 return
         await update.effective_message.reply_text(get_text(lang, 'analysis_premium_start'))
     
-    try:
-        search_results_list = google_search.search(queries=[query])
-        
-        if not search_results_list or not search_results_list[0].results:
-            await update.effective_message.reply_text(get_text(lang, 'analysis_no_info'))
-            return
+    async def _run_analysis():
+        async with AsyncSessionFactory() as session:
+            try:
+                search_results_list = google_search.search(queries=[query])
 
-        search_results = search_results_list[0].results
-        if extended:
-            analysis_text, pdf_path, md_path, chart_path = await _generate_extended_report(token, search_results, db_session)
-        else:
-            prompt = ANALYSIS_PROMPT.format(
-                user_query=token,
-                search_results=json.dumps(search_results, indent=2, ensure_ascii=False),
-            )
-            analysis_text = await _generate_summary(prompt, token, db_session)
+                if not search_results_list or not search_results_list[0].results:
+                    await context.bot.send_message(chat_id=update.effective_chat.id, text=get_text(lang, 'analysis_no_info'))
+                    return
 
-        final_message = get_text(lang, 'analysis_header', payload=token, analysis=analysis_text)
-        if extended:
-            if not premium:
-                await db_ops.deduct_stars(db_session, user_id, EXTENDED_ANALYSIS_PRICE)
-            with open(pdf_path, 'rb') as pf:
-                await update.effective_message.reply_document(
-                    pf,
-                    filename=f"{token}_report.pdf",
-                    caption=final_message,
-                    parse_mode=constants.ParseMode.MARKDOWN,
+                search_results = search_results_list[0].results
+                if extended:
+                    analysis_text, pdf_path, md_path, chart_path = await _generate_extended_report(token, search_results, session)
+                else:
+                    prompt = ANALYSIS_PROMPT.format(
+                        user_query=token,
+                        search_results=json.dumps(search_results, indent=2, ensure_ascii=False),
+                    )
+                    analysis_text = await _generate_summary(prompt, token, session)
+
+                final_message = get_text(lang, 'analysis_header', payload=token, analysis=analysis_text)
+                if extended:
+                    if not premium:
+                        await db_ops.deduct_stars(session, user_id, EXTENDED_ANALYSIS_PRICE)
+                    with open(pdf_path, 'rb') as pf:
+                        await context.bot.send_document(
+                            chat_id=update.effective_chat.id,
+                            document=pf,
+                            filename=f"{token}_report.pdf",
+                            caption=final_message,
+                            parse_mode=constants.ParseMode.MARKDOWN,
+                        )
+                    with open(md_path, 'rb') as mf:
+                        await context.bot.send_document(chat_id=update.effective_chat.id, document=mf, filename=f"{token}_report.md")
+                    for path in (pdf_path, md_path, chart_path):
+                        try:
+                            os.remove(path)
+                        except OSError:
+                            pass
+                else:
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        text=final_message,
+                        parse_mode=constants.ParseMode.MARKDOWN,
+                        disable_web_page_preview=True,
+                    )
+                await db_ops.add_chat_message(session=session, user_id=user_id, role='model', text=final_message)
+                analysis_cache[cache_key] = (time.time(), final_message)
+
+            except Exception as e:
+                logger.error(
+                    f"Ошибка при выполнении анализа токена для {user_id} и запроса '{token}': {e}",
+                    exc_info=True,
                 )
-            with open(md_path, 'rb') as mf:
-                await update.effective_message.reply_document(mf, filename=f"{token}_report.md")
-            for path in (pdf_path, md_path, chart_path):
-                try:
-                    os.remove(path)
-                except OSError:
-                    pass
-        else:
-            await update.effective_message.reply_text(
-                final_message,
-                parse_mode=constants.ParseMode.MARKDOWN,
-                disable_web_page_preview=True,
-            )
-        await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=final_message)
-        analysis_cache[cache_key] = (time.time(), final_message)
+                await context.bot.send_message(chat_id=update.effective_chat.id, text=get_text(lang, 'analysis_error'))
 
-    except Exception as e:
-        logger.error(
-            f"Ошибка при выполнении анализа токена для {user_id} и запроса '{token}': {e}",
-            exc_info=True,
-        )
-        await update.effective_message.reply_text(get_text(lang, 'analysis_error'))
+    await update.effective_message.reply_text(get_text(lang, 'analysis_processing'))
+    asyncio.create_task(_run_analysis())

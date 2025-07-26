@@ -4,6 +4,7 @@
 import os
 import logging
 import httpx
+import asyncio
 from typing import List, Dict
 from datetime import datetime
 from dotenv import load_dotenv
@@ -69,21 +70,24 @@ async def handle_general_ai_conversation(update: Update, context: CallbackContex
             user_input=user_input
         )
 
-        ai_response = ""
-
-        if GEMINI_API_KEY:
-            headers = {'Content-Type': 'application/json'}
-            api_payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": { "temperature": 0.7, "maxOutputTokens": 512 }}
+        async def _gemini_call() -> str | None:
+            if not GEMINI_API_KEY:
+                return None
+            headers = {"Content-Type": "application/json"}
+            api_payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.7, "maxOutputTokens": 512}}
             try:
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.post(GEMINI_API_URL, json=api_payload, headers=headers)
                     response.raise_for_status()
                     api_data = response.json()
-                    ai_response = api_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    return api_data["candidates"][0]["content"]["parts"][0]["text"].strip()
             except Exception as e:
                 logger.warning(f"Gemini chat failed: {e}")
+                return None
 
-        if not ai_response and OPENAI_API_KEY:
+        async def _openai_call() -> str | None:
+            if not OPENAI_API_KEY:
+                return None
             headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
             payload_oa = {"model": OPENAI_MODEL, "messages": [{"role": "user", "content": prompt}], "temperature": 0.7}
             try:
@@ -91,9 +95,27 @@ async def handle_general_ai_conversation(update: Update, context: CallbackContex
                     resp = await client.post(OPENAI_API_URL, json=payload_oa, headers=headers)
                     resp.raise_for_status()
                     data = resp.json()
-                    ai_response = data["choices"][0]["message"]["content"].strip()
+                    return data["choices"][0]["message"]["content"].strip()
             except Exception as e:
                 logger.error(f"OpenAI chat failed: {e}")
+                return None
+
+        tasks = []
+        if GEMINI_API_KEY:
+            tasks.append(asyncio.create_task(_gemini_call()))
+        if OPENAI_API_KEY:
+            tasks.append(asyncio.create_task(_openai_call()))
+
+        ai_response = ""
+        if tasks:
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for p in pending:
+                p.cancel()
+            for d in done:
+                res = d.result()
+                if res:
+                    ai_response = res
+                    break
 
         if not ai_response:
             ai_response = get_text(lang, 'ai_generic_empty')
