@@ -199,8 +199,13 @@ async def telegram_webhook(
         logger.warning(
             "Клиент (Telegram) отключился до того, как мы успели прочитать запрос. Игнорируем."
         )
-    except json.JSONDecodeError:
-        logger.warning(f"Получен запрос с невалидным JSON: {raw_body!r}")
+    except json.JSONDecodeError as e:
+        logger.warning(
+            "Получен запрос с невалидным JSON: %r, длина=%d, ошибка=%s",
+            raw_body,
+            len(raw_body),
+            e,
+        )
     except Exception as e:
         logger.error(f"Ошибка при разборе обновления: {e!r}", exc_info=True)
 
