@@ -58,7 +58,6 @@ router = IntentRouter()
 # Стоимость подписки в звёздах и описание платежа
 SUBSCRIPTION_PRICE = int(os.getenv("SUBSCRIPTION_PRICE", "20"))
 SUBSCRIPTION_DESC = os.getenv("SUBSCRIPTION_DESC", "Channel subscription")
-PAYMENT_PROVIDER_TOKEN = os.getenv("PAYMENT_PROVIDER_TOKEN")
 # Показывать подсказку по популярным темам не чаще, чем раз в N сообщений
 TOP_TOPICS_HINT_LIMIT = 10
 TOP_TOPICS_HINT_COOLDOWN = 24 * 60 * 60  # 24 часа
@@ -679,74 +678,6 @@ async def handle_stars_payment(update: Update, context: CallbackContext, db_sess
     except Exception as e:
         logger.error(f'Failed to update subscription for {user_id}: {e}')
 
-async def handle_invoice_payment(update: Update, context: CallbackContext, db_session: AsyncSession):
-    """Обрабатывает успешную оплату через Telegram Payments."""
-    user_id = update.effective_user.id
-    try:
-        payload = ''
-        if update.effective_message.successful_payment:
-            payload = update.effective_message.successful_payment.invoice_payload or ''
-
-        if 'subscription' in payload:
-            next_payment = datetime.now(timezone.utc) + timedelta(days=30)
-            level = 'premium' if 'premium' in payload else 'basic'
-            await db_ops.create_or_update_subscription(
-                db_session,
-                user_id,
-                is_active=True,
-                next_payment=next_payment,
-                level=level,
-            )
-            schedule_subscription_reminder(user_id, next_payment)
-            await db_ops.add_chat_message(
-                session=db_session,
-                user_id=user_id,
-                role='system',
-                text='subscription update',
-                event='subscription',
-            )
-            channel_id = os.getenv('PRIVATE_CHANNEL_ID')
-            if channel_id:
-                try:
-                    await context.bot.unban_chat_member(channel_id, user_id)
-                    invite = await context.bot.export_chat_invite_link(channel_id)
-                    lang = context.user_data.get('lang', 'ru')
-                    msg = get_text(lang, 'subscription_access_granted', link=invite)
-                    await context.bot.send_message(
-                        user_id,
-                        msg,
-                        parse_mode=constants.ParseMode.MARKDOWN,
-                    )
-                except Exception as e:
-                    logger.error(f'Failed to grant channel access for {user_id}: {e}')
-
-        pending_product = context.user_data.pop('pending_product_purchase', None)
-        if pending_product:
-            product = await db_ops.get_product(db_session, pending_product)
-            if product and not await db_ops.has_purchased(db_session, user_id, pending_product):
-                await db_ops.add_purchase(db_session, user_id, pending_product)
-                await db_ops.add_chat_message(
-                    session=db_session,
-                    user_id=user_id,
-                    role='system',
-                    text=f'purchased {product.name}',
-                    event='purchase',
-                )
-                await context.bot.send_message(
-                    user_id,
-                    get_text(context.user_data.get('lang', 'ru'), 'purchase_success', product=product.name),
-                    parse_mode=constants.ParseMode.MARKDOWN,
-                )
-                try:
-                    if product.content_type == 'text':
-                        await context.bot.send_message(user_id, product.content_value)
-                    elif product.content_type == 'file':
-                        with open(product.content_value, 'rb') as f:
-                            await context.bot.send_document(user_id, f)
-                except Exception as e:
-                    logger.error(f'Delivery failed for {user_id}: {e}')
-    except Exception as e:
-        logger.error(f'Failed to process payment for {user_id}: {e}')
 async def handle_track_coin(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     lang = context.user_data.get('lang', 'ru')
     if not payload or not is_valid_symbol(payload):
@@ -884,18 +815,12 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         else:
             await update.callback_query.answer()
         return
-    if update.pre_checkout_query:
-        await context.bot.answer_pre_checkout_query(update.pre_checkout_query.id, ok=True)
-        return
 
     message = update.effective_message
     user = update.effective_user
     if not user or not message or user.is_bot or user.id == getattr(context.bot, 'id', None):
         return
 
-    if getattr(message, 'successful_payment', None):
-        await handle_invoice_payment(update, context, db_session)
-        return
     if getattr(message, 'stars', None):
         await handle_stars_payment(update, context, db_session)
         return
