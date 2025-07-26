@@ -11,7 +11,7 @@ from database.models import User, Purchase, Subscription
 
 async def active_users_count(session: AsyncSession, days: int = 30) -> int:
     """Return number of users active in the last ``days`` days."""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(datetime.UTC) - timedelta(days=days)
     result = await session.execute(
         select(func.count()).select_from(User).where(User.last_activity_at >= cutoff)
     )
@@ -20,7 +20,7 @@ async def active_users_count(session: AsyncSession, days: int = 30) -> int:
 
 async def purchase_frequency(session: AsyncSession, days: int = 30) -> float:
     """Average number of purchases per user for the last ``days`` days."""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = datetime.now(datetime.UTC) - timedelta(days=days)
     total_purchases = await session.execute(
         select(func.count()).select_from(Purchase).where(Purchase.purchased_at >= cutoff)
     )

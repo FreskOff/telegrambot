@@ -37,7 +37,7 @@ from settings.messages import get_text
 from ai.general import handle_general_ai_conversation
 from analysis.handler import handle_token_analysis
 from crypto.pre_market import get_premarket_signals
-from utils.api_clients import coinmarketcap_client, binance_client
+from utils.api_clients import coinmarketcap_client, binance_client, coingecko_client
 from utils.charts import create_price_chart
 from analysis.metrics import gather_metrics
 from defi.farming import handle_defi_farming
@@ -637,7 +637,7 @@ async def handle_invoice_payment(update: Update, context: CallbackContext, db_se
     """Обновляет подписку после оплаты через Telegram Payments."""
     user_id = update.effective_user.id
     try:
-        next_payment = datetime.utcnow() + timedelta(days=30)
+        next_payment = datetime.now(datetime.UTC) + timedelta(days=30)
         payload = ''
         if update.effective_message.successful_payment:
             payload = update.effective_message.successful_payment.invoice_payload or ''
@@ -768,7 +768,7 @@ async def handle_portfolio_summary(update: Update, context: CallbackContext, pay
             for profit, coin, price in data:
                 pct = ((price - (coin.buy_price or 0)) / (coin.buy_price or 1)) * 100 if coin.buy_price else 0
                 days = (
-                    f" | { (datetime.utcnow() - coin.purchase_date).days }d" if coin.purchase_date else ""
+                    f" | { (datetime.now(datetime.UTC) - coin.purchase_date).days }d" if coin.purchase_date else ""
                 )
                 lines.append(
                     f"• *{coin.coin_symbol}*: {coin.quantity:g} шт. | текущая цена ${price:,.2f} | P/L ${profit:,.2f} ({pct:+.2f}%)" + days
@@ -874,7 +874,12 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
             await func(update, context, arg, db_session)
             return
 
-    start_ts = datetime.utcnow()
+    if user_input.startswith('/'):
+        # Нераспознанная команда
+        await handle_unsupported_request(update, context, '', db_session)
+        return
+
+    start_ts = datetime.now(datetime.UTC)
     try:
         await context.bot.send_chat_action(chat_id=message.chat_id, action=constants.ChatAction.TYPING)
         
@@ -885,7 +890,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
             await db_ops.update_dialog(db_session, dialog.id, topic=intent)
         top_topics = await db_ops.get_top_user_topics(db_session, user.id)
         hint_state = context.user_data.get('top_topics_hint', {})
-        now_ts = datetime.utcnow().timestamp()
+        now_ts = datetime.now(datetime.UTC).timestamp()
         last_ts = hint_state.get('last_shown')
         allow_hint = (
             last_ts is None
@@ -920,14 +925,14 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
 
         handler = router.get(intent) or handle_unsupported_request
         await handler(update, context, payload, db_session)
-        duration = int((datetime.utcnow() - start_ts).total_seconds() * 1000)
+        duration = int((datetime.now(datetime.UTC) - start_ts).total_seconds() * 1000)
         await db_ops.update_chat_message(db_session, user_msg.id, duration_ms=duration)
 
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}", exc_info=True)
         lang = context.user_data.get('lang', 'ru')
         await message.reply_text(get_text(lang, 'error_generic'))
-        duration = int((datetime.utcnow() - start_ts).total_seconds() * 1000)
+        duration = int((datetime.now(datetime.UTC) - start_ts).total_seconds() * 1000)
         await db_ops.update_chat_message(db_session, user_msg.id, duration_ms=duration, error=True)
 
 # --- Регистрация обработчиков намерений ---

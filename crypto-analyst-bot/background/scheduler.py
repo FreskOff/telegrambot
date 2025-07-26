@@ -256,7 +256,7 @@ def schedule_subscription_reminder(user_id: int, next_payment: datetime):
     if not next_payment:
         return
     remind_at = next_payment - timedelta(days=3)
-    if remind_at <= datetime.utcnow():
+    if remind_at <= datetime.now(datetime.UTC):
         return
     job_id = f"reminder_{user_id}"
     scheduler.add_job(
