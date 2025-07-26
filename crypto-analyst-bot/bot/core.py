@@ -596,6 +596,12 @@ async def handle_stars_payment(update: Update, context: CallbackContext, db_sess
     """
     user_id = update.effective_user.id
     try:
+        sub = await db_ops.get_subscription(db_session, user_id)
+        active = sub.is_active if sub else False
+        next_payment = sub.next_payment if sub else None
+        level = sub.level if sub else 'basic'
+
+        status = None
         try:
             status = await context.bot._post(
                 'payments.getStarsStatus',
@@ -605,12 +611,12 @@ async def handle_stars_payment(update: Update, context: CallbackContext, db_sess
             logger.error(
                 f"payments.getStarsStatus failed for {user_id}: {e}",
             )
-            status = {}
-        active = bool(status.get('active')) if isinstance(status, dict) else False
-        next_ts = status.get('next_payment_date') if isinstance(status, dict) else None
-        next_payment = datetime.fromtimestamp(next_ts) if next_ts else None
-        sub = await db_ops.get_subscription(db_session, user_id)
-        level = sub.level if sub else 'basic'
+
+        if isinstance(status, dict):
+            active = bool(status.get('active'))
+            next_ts = status.get('next_payment_date')
+            next_payment = datetime.fromtimestamp(next_ts) if next_ts else next_payment
+
         await db_ops.create_or_update_subscription(
             db_session,
             user_id,
@@ -618,6 +624,7 @@ async def handle_stars_payment(update: Update, context: CallbackContext, db_sess
             next_payment=next_payment,
             level=level,
         )
+
         if active and next_payment:
             schedule_subscription_reminder(user_id, next_payment)
 
