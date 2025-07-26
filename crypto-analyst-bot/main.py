@@ -5,6 +5,7 @@
 import os
 import logging
 import json
+import re
 from datetime import datetime
 import uvicorn
 import asyncio
@@ -51,6 +52,24 @@ app.include_router(admin_router)
 # --- Инициализация Telegram Bot API ---
 application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 bot = application.bot
+
+
+def _load_update_data(raw_body: bytes) -> dict:
+    """Parse update JSON and remove trailing commas if needed."""
+    text = raw_body.decode("utf-8")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        cleaned = text.rstrip()
+        if cleaned.endswith(','):
+            cleaned = cleaned[:-1]
+        cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
+        if cleaned != text:
+            try:
+                return json.loads(cleaned)
+            except json.JSONDecodeError:
+                pass
+        raise e
 
 
 async def process_update(update_data: dict) -> None:
@@ -171,7 +190,7 @@ async def telegram_webhook(
 
     try:
         raw_body = await request.body()
-        update_data = json.loads(raw_body.decode("utf-8"))
+        update_data = _load_update_data(raw_body)
 
         update_preview = Update.de_json(update_data, bot)
         if (

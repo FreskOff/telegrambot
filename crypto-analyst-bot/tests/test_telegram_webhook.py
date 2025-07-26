@@ -147,3 +147,30 @@ def test_telegram_webhook_invalid_json(monkeypatch):
     assert res.status_code == 200
     assert warnings and warnings[0]
     assert 'task' not in warnings
+
+
+def test_telegram_webhook_trailing_comma(monkeypatch):
+    update = {
+        'callback_query': None,
+        'pre_checkout_query': None,
+        'effective_message': {'text': 'hi'},
+        'effective_chat': {'id': 1},
+        'effective_user': {'id': 2},
+    }
+    body = json.dumps(update).encode('utf-8') + b','
+    req = _make_request(body)
+
+    called = {}
+
+    async def fake_process(data):
+        called['data'] = data
+
+    monkeypatch.setattr(main, 'process_update', fake_process)
+    scheduled = {}
+    monkeypatch.setattr(asyncio, 'create_task', lambda coro: scheduled.setdefault('coro', coro))
+
+    res = asyncio.run(main.telegram_webhook(req, os.environ['TELEGRAM_BOT_TOKEN'], db_session=None))
+    assert res.status_code == 200
+
+    asyncio.run(scheduled['coro'])
+    assert called['data'] == update
