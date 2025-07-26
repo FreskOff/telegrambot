@@ -301,6 +301,17 @@ async def handle_buy_product(update: Update, context: CallbackContext, payload: 
     # дальнейшая обработка после успешной оплаты происходит в handle_stars_payment
 
 
+async def handle_buy_report(update: Update, context: CallbackContext, db_session: AsyncSession):
+    """Initiate purchase of an extended report via Telegram Stars."""
+    lang = context.user_data.get('lang', 'ru')
+    try:
+        await send_stars_payment_request(update, context, 100)
+        await update.effective_message.reply_text(get_text(lang, 'purchase_open_form'))
+    except Exception as e:
+        logger.error(f"Report payment failed for {update.effective_user.id}: {e}")
+        await update.effective_message.reply_text(get_text(lang, 'purchase_error'))
+
+
 async def handle_course_command(update: Update, context: CallbackContext, payload: str, db_session: AsyncSession):
     """Команды управления курсами."""
     lang = context.user_data.get('lang', 'ru')
@@ -727,6 +738,12 @@ async def get_symbol_from_context(session: AsyncSession, user_id: int) -> str | 
     return None
 
 async def handle_update(update: Update, context: CallbackContext, db_session: AsyncSession):
+    if update.callback_query:
+        if update.callback_query.data == 'buy_report':
+            await handle_buy_report(update, context, db_session)
+        else:
+            await update.callback_query.answer()
+        return
     if update.pre_checkout_query:
         await context.bot.answer_pre_checkout_query(update.pre_checkout_query.id, ok=True)
         return
