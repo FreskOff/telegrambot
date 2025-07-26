@@ -55,15 +55,16 @@ bot = application.bot
 
 
 def _load_update_data(raw_body: bytes) -> dict:
-    """Parse update JSON and remove trailing commas if needed."""
-    text = raw_body.decode("utf-8")
+    """Parse update JSON and try to recover from trailing commas."""
+    text = raw_body.decode("utf-8", "ignore")
     try:
         return json.loads(text)
     except json.JSONDecodeError as e:
         cleaned = text.rstrip()
-        if cleaned.endswith(','):
-            cleaned = cleaned[:-1]
-        cleaned = re.sub(r",\s*([}\]])", r"\1", cleaned)
+        # Remove trailing commas at end of string
+        cleaned = re.sub(r",\s*$", "", cleaned)
+        # Remove commas immediately before closing brackets/braces
+        cleaned = re.sub(r",\s*(?=[}\]])", "", cleaned)
         if cleaned != text:
             try:
                 return json.loads(cleaned)

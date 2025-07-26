@@ -174,3 +174,32 @@ def test_telegram_webhook_trailing_comma(monkeypatch):
 
     asyncio.run(scheduled['coro'])
     assert called['data'] == update
+
+
+def test_telegram_webhook_trailing_comma_inside(monkeypatch):
+    update = {
+        'callback_query': None,
+        'pre_checkout_query': None,
+        'effective_message': {'text': 'hi'},
+        'effective_chat': {'id': 1},
+        'effective_user': {'id': 2},
+    }
+    # insert a trailing comma before closing object
+    text = json.dumps(update)
+    body = text[:-1] + ',}'
+    req = _make_request(body.encode('utf-8'))
+
+    called = {}
+
+    async def fake_process(data):
+        called['data'] = data
+
+    monkeypatch.setattr(main, 'process_update', fake_process)
+    scheduled = {}
+    monkeypatch.setattr(asyncio, 'create_task', lambda coro: scheduled.setdefault('coro', coro))
+
+    res = asyncio.run(main.telegram_webhook(req, os.environ['TELEGRAM_BOT_TOKEN'], db_session=None))
+    assert res.status_code == 200
+
+    asyncio.run(scheduled['coro'])
+    assert called['data'] == update
