@@ -102,5 +102,8 @@ async def handle_general_ai_conversation(update: Update, context: CallbackContex
         await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=ai_response)
 
     except Exception as e:
-        logger.error(f"Ошибка в обработчике общего диалога: {e}", exc_info=True)
+        logger.error(
+            f"Ошибка в обработчике общего диалога для {user_id} и запроса '{user_input}': {e}",
+            exc_info=True,
+        )
         await update.effective_message.reply_text(get_text(lang, 'ai_generic_error'))

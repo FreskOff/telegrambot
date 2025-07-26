@@ -251,5 +251,8 @@ async def handle_token_analysis(update: Update, context: CallbackContext, payloa
         analysis_cache[cache_key] = (time.time(), final_message)
 
     except Exception as e:
-        logger.error(f"Ошибка при выполнении анализа токена: {e}", exc_info=True)
+        logger.error(
+            f"Ошибка при выполнении анализа токена для {user_id} и запроса '{token}': {e}",
+            exc_info=True,
+        )
         await update.effective_message.reply_text(get_text(lang, 'analysis_error'))

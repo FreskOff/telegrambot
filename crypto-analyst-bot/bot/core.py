@@ -33,6 +33,7 @@ from settings.user import (
     handle_change_language,
     handle_settings_command,
     MAX_FREE_PORTFOLIO_COINS,
+    DAILY_FREE_MESSAGES,
 )
 from settings.messages import get_text
 from ai.general import handle_general_ai_conversation
@@ -168,7 +169,10 @@ async def handle_where_to_buy(update: Update, context: CallbackContext, payload:
         await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=response)
 
     except Exception as e:
-        logger.error(f"Ошибка в handle_where_to_buy: {e}", exc_info=True)
+        logger.error(
+            f"Ошибка в handle_where_to_buy для {user_id} и символа {symbol}: {e}",
+            exc_info=True,
+        )
         error_text = get_text(lang, 'where_to_buy_error')
         await update.effective_message.reply_text(error_text)
         await db_ops.add_chat_message(session=db_session, user_id=user_id, role='model', text=error_text)
@@ -822,11 +826,23 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         return
 
     user_input = message.text.strip()
+    if not user_input:
+        return
+
     db_user = await db_ops.get_or_create_user(session=db_session, tg_user=user)
     logger.info(f"Обработка сообщения от {db_user.id}: '{user_input}'")
     context.user_data['lang'] = db_user.language
     context.user_data['recommendations_enabled'] = getattr(db_user, 'show_recommendations', True)
     lang = context.user_data.get('lang', 'ru')
+
+    # Check daily free message limit
+    subscription = await db_ops.get_subscription(db_session, user.id)
+    msg_count = await db_ops.count_user_messages_today(db_session, user.id)
+    if msg_count >= DAILY_FREE_MESSAGES and not (subscription and subscription.is_active):
+        limit_text = get_text(lang, 'free_daily_limit', limit=DAILY_FREE_MESSAGES)
+        await message.reply_text(limit_text)
+        await db_ops.add_chat_message(session=db_session, user_id=user.id, role='model', text=limit_text)
+        return
 
     dialog = await db_ops.start_dialog(db_session, user.id)
     user_msg = await db_ops.add_chat_message(
@@ -931,7 +947,10 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
         await db_ops.update_chat_message(db_session, user_msg.id, duration_ms=duration)
 
     except Exception as e:
-        logger.error(f"Критическая ошибка: {e}", exc_info=True)
+        logger.error(
+            f"Критическая ошибка для {user.id} при запросе '{user_input}': {e}",
+            exc_info=True,
+        )
         lang = context.user_data.get('lang', 'ru')
         await message.reply_text(get_text(lang, 'error_generic'))
         duration = int((datetime.now(datetime.UTC) - start_ts).total_seconds() * 1000)
