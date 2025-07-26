@@ -54,29 +54,20 @@ application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
 bot = application.bot
 
 
-def _load_update_data(raw_body: bytes) -> dict:
-    """Parse update JSON and try to recover from malformed commas."""
-    text = raw_body.decode("utf-8", "ignore").strip()
+def _load_update_data(raw: bytes) -> list[dict]:
+    """Парсит тело webhook-запроса и ВСЕГДА отдаёт список объектов."""
+    text = raw.decode("utf-8", "ignore").strip()
+
+    # ① одиночный объект → оборачиваем в list
     try:
-        return json.loads(text)
-    except json.JSONDecodeError as e:
-        cleaned = text
-        # Collapse duplicate commas which may appear due to bad formatting
-        while True:
-            new_cleaned = re.sub(r",\s*,+", ",", cleaned)
-            if new_cleaned == cleaned:
-                break
-            cleaned = new_cleaned
+        return [json.loads(text)]
+    except json.JSONDecodeError:
+        pass
 
-        # Remove commas right before closing brackets/braces
-        cleaned = re.sub(r",\s*(?=[}\]])", "", cleaned)
-        # Remove any trailing comma at the very end of the string
-        cleaned = re.sub(r",\s*$", "", cleaned)
-
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            raise e
+    # ② несколько объектов подряд, разделённые запятой
+    cleaned = re.sub(r",\s*,+", ",", text).rstrip(", \n")
+    as_array = f"[{cleaned}]"
+    return json.loads(as_array)
 
 
 async def process_update(update_data: dict) -> None:
@@ -200,32 +191,10 @@ async def telegram_webhook(
 
     try:
         raw_body = await request.body()  # читаем тело один раз
-        try:
-            update_data = json.loads(raw_body)  # обычный парсер
-        except json.JSONDecodeError:
-            update_data = _load_update_data(raw_body)  # fallback-«починка»
+        updates = _load_update_data(raw_body)  # ВСЕГДА list[dict]
 
-        update_preview = Update.de_json(update_data, bot)
-        if (
-            update_preview.callback_query is None
-            and update_preview.pre_checkout_query is None
-            and update_preview.effective_message
-        ):
-            user_id = (
-                update_preview.effective_user.id
-                if update_preview.effective_user
-                else None
-            )
-            lang = "ru"
-            if user_id:
-                user = await db_ops.get_user(db_session, user_id)
-                if user:
-                    lang = user.language
-            await bot.send_message(
-                update_preview.effective_chat.id, get_text(lang, "generic_processing")
-            )
-
-        asyncio.create_task(process_update(update_data))
+        for upd in updates:
+            asyncio.create_task(process_update(upd))
 
     except ClientDisconnect:
         logger.warning(
@@ -234,7 +203,7 @@ async def telegram_webhook(
     except json.JSONDecodeError as e:
         if raw_body is None:
             raw_body = await request.body()
-        logger.warning(
+        logger.debug(
             "Получен запрос с невалидным JSON: %r, длина=%d, ошибка=%s",
             raw_body,
             len(raw_body),
