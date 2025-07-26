@@ -159,6 +159,11 @@ async def handle_settings_command(update: Update, context: CallbackContext, payl
         await db_ops.update_user_settings(db_session, user_id, currency=value.upper())
         context.user_data['currency'] = value.upper()
         text = get_text(lang, 'currency_set', cur=value.upper())
+    elif option in ('recommendations', 'hints') and value:
+        enabled = value.lower() not in ('off', '0', 'false')
+        await db_ops.update_user_settings(db_session, user_id, show_recommendations=enabled)
+        context.user_data['recommendations_enabled'] = enabled
+        text = get_text(lang, 'recommendations_on' if enabled else 'recommendations_off')
     else:
         text = get_text(lang, 'settings_prompt')
 

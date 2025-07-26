@@ -56,7 +56,8 @@ router = IntentRouter()
 SUBSCRIPTION_PRICE = int(os.getenv("SUBSCRIPTION_PRICE", "20"))
 SUBSCRIPTION_DESC = os.getenv("SUBSCRIPTION_DESC", "Channel subscription")
 # Показывать подсказку по популярным темам не чаще, чем раз в N сообщений
-TOP_TOPICS_HINT_INTERVAL = 5
+TOP_TOPICS_HINT_LIMIT = 10
+TOP_TOPICS_HINT_COOLDOWN = 24 * 60 * 60  # 24 часа
 
 
 async def send_stars_payment_request(update: Update, context: CallbackContext, amount: int = SUBSCRIPTION_PRICE) -> None:
@@ -160,18 +161,10 @@ async def handle_premarket_scan(update: Update, context: CallbackContext, payloa
     subscription = await db_ops.get_subscription(db_session, update.effective_user.id)
     if not subscription or not subscription.is_active:
         reminder = get_text(lang, 'subscription_reminder')
-        try:
-            await context.bot._post(
-                "payments.sendStarsForm",
-                data={
-                    "user_id": update.effective_user.id,
-                    "amount": SUBSCRIPTION_PRICE,
-                    "description": SUBSCRIPTION_DESC,
-                },
-            )
-        except Exception as e:
-            logger.error(f"Subscription form error for {update.effective_user.id}: {e}")
-        await update.effective_message.reply_text(reminder)
+        kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(get_text(lang, 'subscribe_button'), callback_data='/subscribe')]]
+        )
+        await update.effective_message.reply_text(reminder, reply_markup=kb)
         return
 
     params = {}
@@ -766,6 +759,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
     db_user = await db_ops.get_or_create_user(session=db_session, tg_user=user)
     logger.info(f"Обработка сообщения от {db_user.id}: '{user_input}'")
     context.user_data['lang'] = db_user.language
+    context.user_data['recommendations_enabled'] = getattr(db_user, 'show_recommendations', True)
     lang = context.user_data.get('lang', 'ru')
 
     dialog = await db_ops.start_dialog(db_session, user.id)
@@ -780,7 +774,7 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
     # Считаем сообщения для подсказки по популярным темам
     hint_state = context.user_data.get('top_topics_hint', {})
     if hint_state.get('dialog_id') != dialog.id:
-        hint_state = {'dialog_id': dialog.id, 'counter': 0, 'shown': False}
+        hint_state = {'dialog_id': dialog.id, 'counter': 0, 'last_shown': None}
     else:
         hint_state['counter'] = hint_state.get('counter', 0) + 1
     context.user_data['top_topics_hint'] = hint_state
@@ -827,15 +821,20 @@ async def handle_update(update: Update, context: CallbackContext, db_session: As
             await db_ops.update_dialog(db_session, dialog.id, topic=intent)
         top_topics = await db_ops.get_top_user_topics(db_session, user.id)
         hint_state = context.user_data.get('top_topics_hint', {})
-        if top_topics and (
-            not hint_state.get('shown') or hint_state.get('counter', 0) >= TOP_TOPICS_HINT_INTERVAL
-        ):
+        now_ts = datetime.utcnow().timestamp()
+        last_ts = hint_state.get('last_shown')
+        allow_hint = (
+            last_ts is None
+            or now_ts - last_ts >= TOP_TOPICS_HINT_COOLDOWN
+            or hint_state.get('counter', 0) >= TOP_TOPICS_HINT_LIMIT
+        )
+        if top_topics and context.user_data.get('recommendations_enabled', True) and allow_hint:
             hint = get_text(lang, 'top_topics_hint', topics=", ".join(top_topics))
             kb = InlineKeyboardMarkup(
                 [[InlineKeyboardButton(get_text(lang, 'full_report_btn'), callback_data='buy_report')]]
             )
             await message.reply_text(hint, reply_markup=kb)
-            hint_state['shown'] = True
+            hint_state['last_shown'] = now_ts
             hint_state['counter'] = 0
             context.user_data['top_topics_hint'] = hint_state
 

@@ -24,6 +24,7 @@ class User(Base):
     timezone = Column(String, nullable=False, default="UTC")
     currency = Column(String, nullable=False, default="USD")
     stars_balance = Column(Integer, nullable=False, default=0, comment="Баланс звёзд для платных функций")
+    show_recommendations = Column(Boolean, nullable=False, default=True, comment="Показывать ли подсказки и рекомендации")
 
     # --- Метрики активности ---
     price_requests = Column(Integer, nullable=False, default=0)
