@@ -199,16 +199,11 @@ async def telegram_webhook(
         return Response(status_code=403)
 
     try:
-        raw_body = None
-        if hasattr(request, "json"):
-            try:
-                update_data = await request.json()
-            except json.JSONDecodeError:
-                raw_body = await request.body()
-                update_data = _load_update_data(raw_body)
-        else:
-            raw_body = await request.body()
-            update_data = _load_update_data(raw_body)
+        raw_body = await request.body()  # читаем тело один раз
+        try:
+            update_data = json.loads(raw_body)  # обычный парсер
+        except json.JSONDecodeError:
+            update_data = _load_update_data(raw_body)  # fallback-«починка»
 
         update_preview = Update.de_json(update_data, bot)
         if (
@@ -249,6 +244,8 @@ async def telegram_webhook(
         logger.error(f"Ошибка при разборе обновления: {e!r}", exc_info=True)
 
     return Response(status_code=200)
+
+
 
 
 # --- Запуск приложения ---
