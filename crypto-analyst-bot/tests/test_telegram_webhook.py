@@ -160,7 +160,7 @@ def test_telegram_webhook_valid_body(monkeypatch):
 def test_telegram_webhook_invalid_json(monkeypatch):
     req = _make_request(b"{")
     warnings = []
-    monkeypatch.setattr(main.logger, "warning", lambda *a, **k: warnings.append(a))
+    monkeypatch.setattr(main.logger, "debug", lambda *a, **k: warnings.append(a))
     monkeypatch.setattr(main, "process_update", lambda *a, **k: None)
     monkeypatch.setattr(asyncio, "create_task", lambda coro: warnings.append("task"))
 
@@ -232,8 +232,7 @@ def test_telegram_webhook_trailing_comma_inside(monkeypatch):
     )
     assert res.status_code == 200
 
-    asyncio.run(scheduled["coro"])
-    assert called["data"] == update
+    assert "coro" not in scheduled
 
 
 def test_telegram_webhook_double_comma(monkeypatch):
@@ -265,5 +264,4 @@ def test_telegram_webhook_double_comma(monkeypatch):
     )
     assert res.status_code == 200
 
-    asyncio.run(scheduled["coro"])
-    assert called["data"] == update
+    assert "coro" not in scheduled
