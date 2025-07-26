@@ -23,7 +23,7 @@ async def generate_recommendations(session: AsyncSession, user_id: int) -> list[
 
     subscription = await db_ops.get_subscription(session, user_id)
     if subscription and subscription.is_active and subscription.next_payment:
-        days_left = (subscription.next_payment - datetime.utcnow()).days
+        days_left = (subscription.next_payment - datetime.now(datetime.UTC)).days
         if days_left <= 5:
             recs.append(("renew", subscription.next_payment.strftime("%Y-%m-%d")))
     elif usage.get("message_count", 0) >= 20:
