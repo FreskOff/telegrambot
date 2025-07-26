@@ -3,7 +3,7 @@
 
 import logging
 from typing import List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update as sqlalchemy_update, desc, delete as sqlalchemy_delete
@@ -53,8 +53,8 @@ async def get_or_create_user(session: AsyncSession, tg_user: TelegramUser) -> Us
             db_user.first_name = tg_user.first_name
             db_user.last_name = tg_user.last_name
             updated = True
-        db_user.last_activity_at = datetime.now(datetime.UTC)
-        db_user.last_contact_at = datetime.now(datetime.UTC)
+        db_user.last_activity_at = datetime.now(timezone.utc)
+        db_user.last_contact_at = datetime.now(timezone.utc)
         updated = True
         if updated:
             try:
@@ -70,8 +70,8 @@ async def get_or_create_user(session: AsyncSession, tg_user: TelegramUser) -> Us
             username=tg_user.username,
             first_name=tg_user.first_name,
             last_name=tg_user.last_name,
-            last_activity_at=datetime.now(datetime.UTC),
-            last_contact_at=datetime.now(datetime.UTC),
+            last_activity_at=datetime.now(timezone.utc),
+            last_contact_at=datetime.now(timezone.utc),
             show_recommendations=True,
         )
         session.add(new_user)
@@ -136,7 +136,7 @@ async def increment_request_counter(session: AsyncSession, user_id: int, field: 
     await session.execute(
         sqlalchemy_update(User)
         .where(User.id == user_id)
-        .values(**{field: getattr(User, field) + 1, "last_contact_at": datetime.now(datetime.UTC)})
+        .values(**{field: getattr(User, field) + 1, "last_contact_at": datetime.now(timezone.utc)})
     )
     await safe_commit(session)
     await update_usage_stats(session, user_id)
@@ -326,7 +326,7 @@ async def end_dialog(session: AsyncSession, dialog_id: int):
     await session.execute(
         sqlalchemy_update(Dialog)
         .where(Dialog.id == dialog_id)
-        .values(is_active=False, ended_at=datetime.now(datetime.UTC))
+        .values(is_active=False, ended_at=datetime.now(timezone.utc))
     )
     await safe_commit(session)
 
@@ -391,7 +391,7 @@ async def add_chat_message(
     await session.execute(
         sqlalchemy_update(User)
         .where(User.id == user_id)
-        .values(last_contact_at=datetime.now(datetime.UTC))
+        .values(last_contact_at=datetime.now(timezone.utc))
     )
     try:
         await safe_commit(session)
@@ -416,7 +416,7 @@ async def get_chat_history(session: AsyncSession, user_id: int, limit: int = 10)
 
 async def count_user_messages_today(session: AsyncSession, user_id: int) -> int:
     """Возвращает количество сообщений пользователя за сегодняшний день."""
-    start_of_day = datetime.now(datetime.UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    start_of_day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     result = await session.execute(
         select(func.count())
         .select_from(ChatHistory)
@@ -697,7 +697,7 @@ async def get_top_request_types(session: AsyncSession, limit: int = 5) -> list[t
 
 async def new_subscriptions_count(session: AsyncSession, days: int = 1) -> int:
     """Количество новых подписок за период."""
-    cutoff = datetime.now(datetime.UTC) - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     result = await session.execute(
         select(func.count()).select_from(Subscription).where(Subscription.created_at >= cutoff)
     )
@@ -706,7 +706,7 @@ async def new_subscriptions_count(session: AsyncSession, days: int = 1) -> int:
 
 async def inactive_users_count(session: AsyncSession, days: int = 30) -> int:
     """Количество пользователей, не проявлявших активность более ``days`` дней."""
-    cutoff = datetime.now(datetime.UTC) - timedelta(days=days)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     result = await session.execute(
         select(func.count()).select_from(User).where(User.last_contact_at < cutoff)
     )
